@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>反诈智能识别与报案辅助系统 · 东北电力大学</title>
+    <!-- 国内稳定CDN (移除Tesseract，保留必要库) -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        :root {
+            --primary: #d92121;
+            --primary-light: #e63939;
+            --primary-dark: #c41212;
+            --blue: #1890ff;
+            --green: #52c41a;
+            --purple: #722ED1;
+            --deep-blue: #4F6DF5;
+            --white: #fff;
+            --bg: #f5f7fa;
+            --light-gray: #f0f2f5;
+            --mid-gray: #ddd;
+            --dark-gray: #666;
+            --deep-gray: #333;
+            --danger: #ff4d4f;
+            --warning: #faad14;
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --animate-big: 40px;
+            --animate-normal: 20px;
+            --animate-speed: 0.4s;
+            --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+            --ease-bounce: cubic-bezier(0.34, 1.2, 0.64, 1);
+            --transition-normal: all var(--animate-speed) var(--ease-soft);
+            --transition-fast: all 0.2s var(--ease-soft);
+        }
+        /* ==================== 加载进度条样式 ==================== */
+        .loader-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        .loader-title {
+            font-size: 24px;
+            color: var(--primary);
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+        .progress-bar-container {
+            width: 80%;
+            max-width: 600px;
+            height: 12px;
+            background: var(--light-gray);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--primary-light));
+            border-radius: 6px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            margin-top: 15px;
+            color: var(--dark-gray);
+            font-size: 14px;
+        }
+        /* ==================== 全局固定头部 & 底部 ==================== */
+        body {
+            background: var(--bg);
+            color: var(--deep-gray);
+            padding-bottom: 70px;  /* 为底部footer留空间 */
+            touch-action: manipulation;
+        }
+        /* 全局头部 */
+        .global-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--primary);
+            color: var(--white);
+            padding: 15px 20px;
+            width: 100%;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: var(--transition-normal);
+        }
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .title-group {
+            flex: 1;
+        }
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            animation: fadeInUpBig 0.4s ease forwards;
+            line-height: 1.3;
+        }
+        .header-sub {
+            font-size: 12px;
+            opacity: 0.8;
+            animation: fadeInUpBig 0.4s ease 0.1s forwards;
+        }
+        /* 右侧东北电力大学大字 */
+        .univ-brand {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #fff, #ffffff);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            white-space: nowrap;
+            transition: var(--transition-fast);
+            font-family: "Microsoft YaHei", "PingFang SC", "黑体", sans-serif;
+        }
+        @media (max-width: 680px) {
+            .univ-brand {
+                font-size: 32px;
+                letter-spacing: 1px;
+                white-space: normal;
+                text-align: right;
+            }
+            .header-title {
+                font-size: 18px;
+            }
+        }
+        @media (max-width: 480px) {
+            .univ-brand {
+                font-size: 16px;
+                font-weight: 700;
+            }
+            .header-top {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .univ-brand {
+                align-self: flex-end;
+            }
+        }
+        .nav-wrapper {
+            position: relative;
+            animation: fadeInUpBig 0.4s ease 0.2s forwards;
+        }
+        .nav {
+            display: flex;
+            gap: 8px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .nav-btn {
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--white);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            min-height: 44px;
+            min-width: fit-content;
+            transition: var(--transition-normal);
+            pointer-events: auto !important;
+        }
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+        .nav-btn.active {
+            background: var(--white);
+            color: var(--primary);
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .nav-btn:active {
+            transform: scale(0.97);
+        }
+        .nav-underline {
+            position: absolute;
+            bottom: 4px;
+            height: 3px;
+            background: var(--white);
+            border-radius: 999px;
+            transition: left 0.2s var(--ease-soft), width 0.2s var(--ease-soft);
+            z-index: 10;
+        }
+        /* ==================== 页面容器样式 ==================== */
+        .page {
+            display: none;
+            width: 100%;
+            min-height: calc(100vh - 140px);
+            animation: pageFadeIn 0.6s var(--ease-soft) forwards;
+        }
+        .page.active {
+            display: block;
+        }
+        /* ==================== 全局动画 ==================== */
+        @keyframes pageFadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes cardSlideIn {
+            from { opacity: 0; transform: translateX(var(--animate-big)) scale(0.98); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+        @keyframes fadeInUpBig {
+            from { opacity: 0; transform: translateY(var(--animate-normal)); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+        @keyframes ripple {
+            to { transform: scale(6); opacity: 0; }
+        }
+        @keyframes formItemFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* ==================== 主内容区 ==================== */
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            position: relative;
+        }
+        .page-content {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 25px;
+            margin-bottom: 20px;
+            animation: cardSlideIn var(--animate-speed) var(--ease-soft) forwards;
+        }
+        .page-title {
+            font-size: 20px;
+            color: var(--deep-gray);
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--primary);
+            margin-bottom: 20px;
+            font-weight: 700;
+            width: fit-content;
+            animation: fadeInUpBig 0.3s ease 0.1s forwards;
+        }
+        /* ==================== 反诈对话助手样式 ==================== */
+        .chat-card {
+            background: #ffffff;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+            overflow: hidden;
+            border: 1px solid var(--light-gray);
+            animation: fadeInUpBig 0.5s ease forwards;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            padding: 14px 18px;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .chat-header span {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        .chat-clear-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .chat-clear-btn:hover {
+            background: rgba(255,255,255,0.4);
+            transform: scale(0.96);
+        }
+        .chat-messages {
+            height: 360px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #fafbfd;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .message {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            animation: fadeInUpBig 0.2s ease;
+            max-width: 85%;
+        }
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        .message-bubble {
+            background: white;
+            padding: 10px 14px;
+            border-radius: 18px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-size: 14px;
+            line-height: 1.5;
+            word-break: break-word;
+            border: 1px solid var(--light-gray);
+        }
+        .message.user .message-bubble {
+            background: var(--primary);
+            color: white;
+            border: none;
+        }
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--light-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .message.user .message-avatar {
+            background: var(--primary-light);
+            color: white;
+        }
+        .chat-input-area {
+            display: flex;
+            padding: 14px 16px;
+            background: white;
+            border-top: 1px solid var(--light-gray);
+            gap: 12px;
+            align-items: center;
+        }
+        .chat-input {
+            flex: 1;
+            border: 1px solid var(--mid-gray);
+            border-radius: 30px;
+            padding: 10px 16px;
+            font-size: 14px;
+            outline: none;
+            transition: 0.2s;
+            resize: none;
+            min-height: 42px;
+            font-family: inherit;
+        }
+        .chat-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(217,33,33,0.1);
+        }
+        .chat-send-btn {
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            min-width: 70px;
+            min-height: 42px;
+        }
+        .chat-send-btn:active {
+            transform: scale(0.96);
+        }
+        .chat-send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: #e9ecef;
+            border-radius: 20px;
+            width: fit-content;
+        }
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background: #6c757d;
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite ease-in-out;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        /* ==================== 通用表单样式 ==================== */
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--mid-gray);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            margin-bottom: 15px;
+            outline: none;
+            transition: var(--transition-normal);
+            background: var(--white);
+            min-height: 44px;
+            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
+            animation-delay: calc(var(--item-index, 0) * 0.05s);
+            opacity: 0;
+        }
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(217, 33, 33, 0.08);
+            transform: translateY(-2px) scale(1.01);
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            line-height: 1.6;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 500;
+            min-height: 44px;
+            min-width: 80px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition-normal);
+            pointer-events: auto !important;
+            position: relative;
+            overflow: hidden;
+            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
+            animation-delay: calc(var(--item-index, 0) * 0.05s);
+            opacity: 0;
+        }
+        .btn .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            pointer-events: none;
+        }
+        .btn:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+        .btn-primary { background: var(--primary); color: var(--white); }
+        .btn-primary:hover { background: var(--primary-light); }
+        .btn-default { background: var(--light-gray); color: var(--deep-gray); }
+        .btn-success { background: var(--green); color: var(--white); }
+        .btn-export { background: var(--blue); color: var(--white); }
+        .btn-pdf { background: var(--purple); color: var(--white); }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .upload-area {
+            border: 2px dashed var(--mid-gray);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            margin: 15px 0;
+            transition: var(--transition-normal);
+            background: var(--bg);
+            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
+            animation-delay: calc(var(--item-index, 0) * 0.05s);
+            opacity: 0;
+        }
+        .upload-area:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px) scale(1.01);
+            background: rgba(217, 33, 33, 0.02);
+        }
+        .upload-area.dragover {
+            border-color: var(--blue);
+            background: #f0f8ff;
+            transform: scale(1.02);
+            border-style: solid;
+        }
+        .upload-area input { display: none; }
+        .preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .preview-item {
+            width: 80px;
+            height: 80px;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            position: relative;
+            transition: var(--transition-normal);
+            animation: fadeInUpBig 0.3s var(--ease-bounce) forwards;
+            animation-delay: calc(var(--item-index, 0) * 0.05s);
+            opacity: 0;
+        }
+        .preview-item:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .preview-del {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            background: var(--primary);
+            color: var(--white);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 10;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: var(--transition-normal);
+        }
+        .preview-item:hover .preview-del {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .result-box {
+            background: #f9f9f9;
+            padding: 0;
+            border-radius: var(--radius-md);
+            white-space: pre-line;
+            line-height: 1.6;
+            margin: 15px 0;
+            border-left: 4px solid var(--primary);
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: var(--transition-normal);
+        }
+        .result-box.show {
+            opacity: 1;
+            max-height: 2000px;
+            padding: 15px;
+            animation: fadeInUpBig 0.3s ease forwards;
+        }
+        .notice {
+            background: #fff7e6;
+            border-left: 4px solid var(--warning);
+            padding: 12px 15px;
+            border-radius: var(--radius-sm);
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+        .tip {
+            font-size: 12px;
+            color: var(--dark-gray);
+            margin: 5px 0 10px;
+            line-height: 1.5;
+        }
+        .loading-tip {
+            color: var(--blue);
+            margin: 10px 0;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .loading-spin {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--blue);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .corpus-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 10px 0;
+        }
+        .corpus-btn {
+            padding: 6px 10px;
+            border: 1px solid var(--mid-gray);
+            border-radius: 4px;
+            background: var(--white);
+            cursor: pointer;
+            font-size: 14px;
+            transition: var(--transition-fast);
+        }
+        .corpus-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-1px);
+        }
+        .corpus-btn.active {
+            background: var(--primary);
+            color: var(--white);
+            border-color: var(--primary);
+        }
+        .switch {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+            cursor: pointer;
+            width: fit-content;
+        }
+        .switch input {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+            min-height: auto;
+            accent-color: var(--primary);
+            animation: none;
+            opacity: 1;
+        }
+        .home-btns {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 40px;
+        }
+        .form-item.error input,
+        .form-item.error textarea {
+            border-color: var(--danger);
+            animation: shake 0.4s var(--ease-soft);
+        }
+        .error-tip {
+            display: none;
+        }
+        .form-item.error .error-tip {
+            display: block;
+            color: var(--danger);
+            font-size: 12px;
+            margin: -10px 0 15px;
+        }
+        .history-item {
+            background: var(--light-gray);
+            border-radius: var(--radius-md);
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: var(--transition-normal);
+        }
+        .history-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--mid-gray);
+        }
+        .history-time {
+            font-size: 12px;
+            color: var(--dark-gray);
+        }
+        .history-empty {
+            text-align: center;
+            color: var(--dark-gray);
+            padding: 40px 0;
+            font-size: 14px;
+        }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid var(--light-gray);
+        }
+        .setting-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        /* 全局底部 */
+        .global-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px 20px;
+            background: var(--light-gray);
+            border-top: 1px solid var(--mid-gray);
+            font-size: 12px;
+            color: var(--dark-gray);
+            text-align: center;
+            line-height: 1.5;
+            z-index: 999;
+        }
+        @media (max-width:768px) {
+            .global-header { padding: 15px 16px; }
+            .container { padding: 0 16px; margin: 16px auto; }
+            .page-content { padding: 15px; }
+            .nav { flex-wrap: nowrap; overflow-x: auto; }
+            .btn-group { flex-direction: column; gap: 10px; }
+            .btn { width: 100%!important; }
+            .home-btns { flex-direction: column; align-items: center; }
+            .home-btns .btn { width: 90%!important; }
+            .preview-item { width: 70px; height: 70px; }
+            input, textarea, select { font-size: 16px; }
+            .chat-messages { height: 280px; }
+            .message { max-width: 95%; }
+        }
+    </style>
+</head>
+<body>
+<div class="loader-container" id="loader">
+    <div class="loader-title">反诈智能识别与报案辅助系统</div>
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="progress-text" id="progressText">加载中... 0%</div>
+</div>
+
+<!-- 全局头部（固定不动） -->
+<div class="global-header">
+    <div class="header-content">
+        <div class="header-top">
+            <div class="title-group">
+                <div class="header-title">反诈智能识别与报案辅助系统</div>
+                <div class="header-sub">创意来自东北电力大学易班工作站-Firefly TYPE IV</div>
+            </div>
+            <div class="univ-brand">东北电力大学</div>
+        </div>
+        <div class="nav-wrapper">
+            <div class="nav" id="globalNav">
+                <button class="nav-btn active" data-target="homePage">首页</button>
+                <button class="nav-btn" data-target="identifyPage">诈骗识别</button>
+                <button class="nav-btn" data-target="billPage">账单导入</button>
+                <button class="nav-btn" data-target="reportPage">报案填报</button>
+                <button class="nav-btn" data-target="historyPage">历史记录</button>
+                <button class="nav-btn" data-target="settingPage">系统设置</button>
+            </div>
+            <div class="nav-underline" id="globalNavUnderline"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 页面容器 -->
+<div class="page" id="homePage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">首页 · 反诈第一线</div>
+            <div class="chat-card">
+                <div class="chat-header"><span>💬 反诈智能助手 · 思政融合版 (DeepSeek驱动)</span><button class="chat-clear-btn" id="clearChatBtn">清空对话</button></div>
+                <div class="chat-messages" id="chatMessages"><div class="message bot"><div class="message-avatar">🤖</div><div class="message-bubble">你好！我是反诈科普与思政教育智能助手。我可以帮你识别诈骗套路、解析真实案例、提供防骗建议，并且融合法治诚信意识。请问有什么可以帮你？</div></div></div>
+                <div class="chat-input-area"><textarea class="chat-input" id="chatInput" rows="1" placeholder="输入你的问题，例如：遇到刷单诈骗怎么办？"></textarea><button class="chat-send-btn" id="sendChatBtn">发送</button></div>
+            </div>
+            <div class="home-btns">
+                <button class="btn btn-primary" data-goto="identifyPage">开始诈骗识别</button>
+                <button class="btn btn-primary" data-goto="reportPage">直接填写报案材料</button>
+                <button class="btn btn-primary" data-goto="billPage">导入微信/支付宝账单</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="identifyPage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">诈骗识别</div>
+            <div class="corpus-btns">
+                <button class="corpus-btn active" data-type="all">全类型诈骗</button>
+                <button class="corpus-btn" data-type="police">公安诈骗</button>
+                <button class="corpus-btn" data-type="loan">贷款诈骗</button>
+                <button class="corpus-btn" data-type="service">冒充客服</button>
+                <button class="corpus-btn" data-type="leader">冒充领导熟人</button>
+            </div>
+            <textarea id="fraudText" placeholder="可直接粘贴短信、聊天记录等文本内容（也可只上传图片）" style="--item-index: 1;"></textarea>
+            <div class="tip">提示：文本和图片二选一即可，也可同时填写/上传。图片将使用DeepSeek视觉能力自动提取文字</div>
+            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 2;">上传证据图片（聊天/转账截图，DeepSeek自动OCR提取）</div>
+            <div class="upload-area" id="identifyUpload" style="--item-index: 3;">点击或拖拽上传图片（JPG/PNG）<input type="file" id="identifyFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
+            <div id="identifyPreview" class="preview"></div>
+            <div id="ocrResult" class="tip"></div>
+            <div class="switch" style="--item-index: 4;"><input type="checkbox" id="desensitizeSwitch" checked><label>自动脱敏（手机号/身份证/银行卡）</label></div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="startDetectBtn" style="--item-index: 5;">开始识别</button>
+                <button class="btn btn-doubao" id="doubaoBtn" style="--item-index: 6;">DeepSeek深度判定</button>
+                <button class="btn btn-default" id="clearIdentifyBtn" style="--item-index: 7;">清空</button>
+                <button class="btn btn-success" id="fillToReportBtn" style="--item-index: 8;">一键填到报案表</button>
+            </div>
+            <div id="detectResult" class="result-box"></div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="billPage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">账单导入</div>
+            <div class="notice">支持微信/支付宝官方导出的CSV/Excel格式账单，自动识别支出记录，计算总支出金额，一键导入报案填报模块</div>
+            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 1;">微信/支付宝账单导入</div>
+            <div class="upload-area" id="billUpload" style="--item-index: 2;">点击或拖拽上传账单文件<input type="file" id="billFile" accept=".csv,.xlsx,.xls"></div>
+            <div id="billResult" class="result-box"></div>
+            <div class="btn-group"><button class="btn btn-primary" id="parseBillBtn" style="--item-index: 3;">解析账单</button><button class="btn btn-success" id="billToReportBtn" style="--item-index: 4;">导入报案表</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="reportPage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">报案填报</div>
+            <div class="notice">1. 带 <span style="color: var(--danger); font-weight: bold;">*</span> 为必填项，请认真填写真实信息<br>2. 证据图片请上传清晰的聊天、转账截图<br>3. 证件号码请按真实格式填写</div>
+            <div class="form-item"><input type="text" id="name" placeholder="请填写真实姓名" style="--item-index: 1;"><label>报案人姓名 *</label><div class="error-tip">请填写报案人姓名</div></div>
+            <div class="form-item"><input type="text" id="phone" placeholder="请填写11位手机号" style="--item-index: 2;"><label>联系电话 *</label><div class="error-tip">请填写正确的11位手机号</div></div>
+            <div class="form-item"><select id="idType" style="--item-index: 3;"><option value="idcard">身份证</option><option value="passport">外国护照</option></select><label>证件类型</label></div>
+            <div class="form-item"><input type="text" id="idNo" placeholder="请填写证件号码" style="--item-index: 4;"><label id="idNoLabel">身份证号 *（18位，最后一位可为X）</label><div class="error-tip">请填写正确的证件号码</div></div>
+            <div class="form-item"><input type="text" id="fraudTime" placeholder="例：2026-03-14 15:30" style="--item-index: 5;"><label>被骗时间 *</label><div class="error-tip">请填写被骗时间</div></div>
+            <div class="form-item"><input type="text" id="fraudType" placeholder="例：刷单返利、冒充客服等" style="--item-index: 6;"><label>诈骗类型 *</label><div class="error-tip">请填写诈骗类型</div></div>
+            <div class="form-item"><input type="text" id="fraudPlatform" placeholder="例：微信、抖音、陌生APP" style="--item-index: 7;"><label>被骗平台/渠道 *</label><div class="error-tip">请填写被骗平台/渠道</div></div>
+            <div class="form-item"><input type="text" id="fraudMoney" placeholder="填写阿拉伯数字" style="--item-index: 8;"><label>被骗总金额 *</label><div class="error-tip">请填写正确的被骗金额</div></div>
+            <div class="form-item"><input type="text" id="otherName" placeholder="无则填暂无" style="--item-index: 9;"><label>对方账号/昵称</label></div>
+            <div class="form-item"><input type="text" id="otherAccount" placeholder="无则填暂无" style="--item-index: 10;"><label>对方收款账号</label></div>
+            <div class="form-item"><textarea id="fraudDetail" placeholder="请详细描述：对方如何联系、如何诱导、转账过程等" style="--item-index: 11;"></textarea><label>被骗详细经过 *</label><div class="error-tip">请填写被骗详细经过</div></div>
+            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 12;">证据图片上传</div>
+            <div class="upload-area" id="reportUpload" style="--item-index: 13;">点击或拖拽上传证据图片<input type="file" id="reportFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
+            <div id="reportPreview" class="preview"></div>
+            <div class="btn-group"><button class="btn btn-primary" id="generateReportBtn" style="--item-index: 14;">生成报案材料</button><button class="btn btn-default" id="copyReportBtn" style="--item-index: 15;">复制全文</button><button class="btn btn-export" id="exportTxtBtn" style="--item-index: 16;">导出TXT</button><button class="btn btn-pdf" id="exportPdfBtn" style="--item-index: 17;">生成PDF文件</button></div>
+            <div id="reportResult" class="result-box"></div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="historyPage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">历史记录</div>
+            <div id="historyList"><div class="history-empty">暂无历史记录</div></div>
+            <div class="btn-group" style="margin-top: 20px;"><button class="btn btn-default" id="clearHistoryBtn">清空所有记录</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="settingPage">
+    <div class="container">
+        <div class="page-content">
+            <div class="page-title">系统设置</div>
+            <div class="setting-item"><div class="setting-label">自动保存历史记录</div><div class="switch"><input type="checkbox" id="autoSaveSwitch" checked><label></label></div></div>
+            <div class="setting-item"><div class="setting-label">默认开启自动脱敏</div><div class="switch"><input type="checkbox" id="defaultDesensitizeSwitch" checked><label></label></div></div>
+            <div class="btn-group" style="margin-top: 30px;"><button class="btn btn-primary" id="saveSettingBtn">保存设置</button><button class="btn btn-default" id="resetSettingBtn">恢复默认</button></div>
+        </div>
+    </div>
+</div>
+
+<div id="pdfTempContainer"></div>
+<div class="global-footer">© 2025 反诈智能识别与报案辅助系统 | 创意来自东北电力大学易班工作站-Firefly TYPE IV | AI引擎: DeepSeek</div>
+
+<script>
+    // ============ 适配 Cloudflare Pages 后端代理，所有AI均使用DeepSeek ============
+    let identifyImages = [], reportImages = [], billData = null;
+    let historyRecords = JSON.parse(localStorage.getItem('fraudHistory')) || [];
+    let systemSettings = JSON.parse(localStorage.getItem('systemSettings')) || { autoSave: true, defaultDesensitize: true };
+    let conversationHistory = [{ role: "system", content: "你是反诈科普与思政教育智能助手，专为大学生服务。结合法治意识、诚信责任，解析诈骗套路，给出预防建议，语气温和专业。" }];
+    let isWaitingReply = false;
+
+    window.onload = function() {
+        const loader = document.getElementById('loader'), progressBar = document.getElementById('progressBar'), progressText = document.getElementById('progressText');
+        const steps = [20,40,60,80,100], texts = ['加载核心组件...','初始化AI服务...','加载账单解析模块...','加载本地存储数据...','加载完成！'];
+        let idx=0;
+        const interval = setInterval(() => {
+            if(idx>=steps.length){
+                clearInterval(interval);
+                loader.style.opacity='0';
+                setTimeout(()=>{
+                    loader.style.display='none';
+                    document.getElementById('homePage').classList.add('active');
+                    initGlobalNav();
+                    initSettings();
+                    renderHistory();
+                    initImageUpload();
+                    bindAllEvents();
+                    initChatModule();
+                    window.addEventListener('resize', ()=>updateGlobalUnderline());
+                    setTimeout(updateGlobalUnderline,100);
+                },400);
+                return;
+            }
+            progressBar.style.width=`${steps[idx]}%`;
+            progressText.textContent=`${texts[idx]} ${steps[idx]}%`;
+            idx++;
+        },300);
+    };
+
+    function initGlobalNav(){
+        const nav=document.getElementById('globalNav'), underline=document.getElementById('globalNavUnderline');
+        const btns=nav.querySelectorAll('.nav-btn');
+        btns.forEach(btn=>{
+            btn.addEventListener('click',()=>{
+                btns.forEach(b=>b.classList.remove('active'));
+                btn.classList.add('active');
+                updateNavUnderline(btn,underline);
+                switchPage(btn.getAttribute('data-target'));
+            });
+        });
+        const active=nav.querySelector('.nav-btn.active');
+        if(active) updateNavUnderline(active,underline);
+    }
+    function updateNavUnderline(btn,underline){
+        if(!btn||!underline) return;
+        const rect=btn.getBoundingClientRect(), parentRect=btn.parentElement.getBoundingClientRect();
+        underline.style.width=`${rect.width}px`;
+        underline.style.left=`${rect.left-parentRect.left}px`;
+    }
+    function updateGlobalUnderline(){
+        const nav=document.getElementById('globalNav'), underline=document.getElementById('globalNavUnderline');
+        const active=nav.querySelector('.nav-btn.active');
+        if(active) updateNavUnderline(active,underline);
+    }
+    function switchPage(pageId){
+        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        const navBtn=document.querySelector(`#globalNav .nav-btn[data-target="${pageId}"]`);
+        if(navBtn){
+            document.querySelectorAll('#globalNav .nav-btn').forEach(b=>b.classList.remove('active'));
+            navBtn.classList.add('active');
+            updateGlobalUnderline();
+        }
+        setTimeout(updateGlobalUnderline,50);
+    }
+    document.querySelectorAll('[data-goto]').forEach(btn=>btn.addEventListener('click',()=>switchPage(btn.getAttribute('data-goto'))));
+
+    // 图片上传与OCR (使用DeepSeek视觉)
+    function initImageUpload(){
+        initUpload('identifyUpload','identifyFile','identifyPreview',(files)=>{identifyImages=files; if(files.length) ocrImagesWithDeepSeek(files);});
+        initUpload('reportUpload','reportFile','reportPreview',(files)=>reportImages=files);
+        initBillUpload('billUpload','billFile');
+    }
+    function initUpload(areaId,fileId,previewId,cb){
+        const area=document.getElementById(areaId), input=document.getElementById(fileId), container=document.getElementById(previewId);
+        area.addEventListener('click',()=>input.click());
+        input.addEventListener('change',e=>handleFiles(e.target.files,container,cb));
+        area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('dragover');});
+        area.addEventListener('dragleave',()=>area.classList.remove('dragover'));
+        area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('dragover');handleFiles(e.dataTransfer.files,container,cb);});
+    }
+    function handleFiles(files,container,cb){
+        let valid=Array.from(files).filter(f=>f.type.includes('image/'));
+        if(!valid.length){alert('请上传图片');return;}
+        let imageFiles=[];
+        container.innerHTML='';
+        valid.forEach((file,idx)=>{
+            let reader=new FileReader();
+            reader.onload=e=>{
+                let id=Date.now()+idx;
+                imageFiles.push({id,file,url:e.target.result});
+                let div=document.createElement('div');div.className='preview-item';
+                let img=document.createElement('img');img.src=e.target.result;
+                let del=document.createElement('div');del.className='preview-del';del.textContent='×';
+                del.onclick=()=>{imageFiles=imageFiles.filter(i=>i.id!==id);div.remove();cb(imageFiles);};
+                div.appendChild(img);div.appendChild(del);container.appendChild(div);
+            };
+            reader.readAsDataURL(file);
+        });
+        setTimeout(()=>cb(imageFiles),300);
+    }
+    // 核心：使用DeepSeek视觉API进行OCR
+    async function ocrImagesWithDeepSeek(imgs){
+        if(!imgs.length) return;
+        let ocrDiv = document.getElementById('ocrResult');
+        ocrDiv.innerHTML = '<div class="loading-tip"><span class="loading-spin"></span>DeepSeek AI 正在识别图片文字...</div>';
+        try {
+            // 构建多模态消息
+            let content = [{ type: "text", text: "请提取以下图片中的所有文字内容，按照图片顺序输出，用“【图片1】”这样的标记区分，只输出文字，不要额外解释。" }];
+            for(let img of imgs) {
+                content.push({ type: "image_url", image_url: { url: img.url } });
+            }
+            const messages = [
+                { role: "system", content: "你是一个专业的OCR文字识别助手，请从图片中提取所有可见文字，保持原始格式。" },
+                { role: "user", content: content }
+            ];
+            const resp = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages })
+            });
+            if(!resp.ok){
+                const errText = await resp.text();
+                throw new Error(`API错误 ${resp.status}: ${errText}`);
+            }
+            const data = await resp.json();
+            const extracted = data.choices?.[0]?.message?.content || "未识别到文字内容";
+            let finalText = extracted;
+            // 自动脱敏
+            if(document.getElementById('desensitizeSwitch').checked){
+                finalText = finalText.replace(/(\d{3})\d{4}(\d{4})/g,'$1****$2')
+                                     .replace(/(\d{6})\d{8,10}(\d{4})/g,'$1***********$2');
+            }
+            const fraudTextarea = document.getElementById('fraudText');
+            fraudTextarea.value = fraudTextarea.value + (fraudTextarea.value ? "\n" : "") + finalText;
+            ocrDiv.textContent = `✅ DeepSeek OCR完成，提取到 ${extracted.length} 个字符，已填入文本框。`;
+        } catch(err){
+            ocrDiv.textContent = `❌ DeepSeek OCR失败：${err.message}`;
+            console.error(err);
+        }
+    }
+
+    function initBillUpload(areaId,fileId){
+        const area=document.getElementById(areaId), input=document.getElementById(fileId);
+        area.addEventListener('click',()=>input.click());
+        input.addEventListener('change',e=>{
+            let file=e.target.files[0]; if(!file) return;
+            let ext=file.name.split('.').pop().toLowerCase();
+            if(!['csv','xlsx','xls'].includes(ext)){alert('请上传CSV/XLSX/XLS文件');return;}
+            let reader=new FileReader();
+            reader.onload=ev=>{
+                try{
+                    if(ext==='csv') billData={raw:ev.target.result,type:'csv',name:file.name};
+                    else{let wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});billData={raw:wb,type:'xlsx',name:file.name};}
+                    alert('账单文件上传成功，请点击"解析账单"');
+                }catch(err){alert('解析失败');console.error(err);}
+            };
+            ext==='csv'?reader.readAsText(file):reader.readAsArrayBuffer(file);
+        });
+        area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('dragover');});
+        area.addEventListener('dragleave',()=>area.classList.remove('dragover'));
+        area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('dragover');let file=e.dataTransfer.files[0];if(file){input.files=e.dataTransfer.files;input.dispatchEvent(new Event('change'));}});
+    }
+    function parseBill(){
+        if(!billData){alert('请先上传账单文件');return;}
+        let billRes=document.getElementById('billResult');
+        billRes.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>正在解析账单...</div>'; billRes.classList.add('show');
+        setTimeout(()=>{
+            try{
+                let total=0, records=[];
+                if(billData.type==='csv'){
+                    let lines=billData.raw.split('\n').filter(l=>l.trim());
+                    lines.forEach((l,idx)=>{if(idx===0)return;let cols=l.split(',');let amount=0,type='';cols.forEach(c=>{let num=parseFloat(c.replace(/[^0-9.-]/g,''));if(!isNaN(num)&&num!==0) amount=Math.abs(num);if(c.includes('支出')||c.includes('付款')) type=c;});if(amount>0&&(type.includes('支出')||type.includes('付款'))){total+=amount;records.push({amount});}});
+                }else{
+                    let wb=billData.raw, ws=wb.Sheets[wb.SheetNames[0]], data=XLSX.utils.sheet_to_json(ws);
+                    data.forEach(row=>{let amt=parseFloat(row['金额']||row['Amount']||0);let typ=row['收支类型']||row['交易类型']||'';if(typ.includes('支出')||typ.includes('付款')||amt<0){let absAmt=Math.abs(amt);total+=absAmt;records.push({amount:absAmt});}});
+                }
+                billRes.textContent=`账单解析完成！\n📊 账单统计：\n- 总支出笔数：${records.length}笔\n- 总支出金额：¥${total.toFixed(2)}元\n`;
+                billData.parsed={totalOut:total,outRecords:records};
+            }catch(e){billRes.textContent=`解析失败：${e.message}`;}
+        },1000);
+    }
+    function detectFraud(){
+        let txt=document.getElementById('fraudText').value.trim();
+        if(!txt&&identifyImages.length===0){alert('请填写识别文本或上传图片');return;}
+        let resDiv=document.getElementById('detectResult');
+        resDiv.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>正在分析诈骗特征...</div>';resDiv.classList.add('show');
+        setTimeout(()=>{
+            let kw={police:['公安局','逮捕','通缉','涉案','配合调查','保证金','安全账户'],loan:['贷款','无抵押','低利息','手续费','保证金','解冻金'],service:['客服','退款','订单异常','保证金','解冻','验证'],leader:['领导','老板','帮忙转账','保密','急用','私事'],all:['刷单','返利','中奖','红包','提现','充值','转账','验证码','密码','银行卡']};
+            let type=document.querySelector('.corpus-btn.active').getAttribute('data-type');
+            let keywords=kw[type]||kw.all;
+            let matched=keywords.filter(k=>txt.includes(k));
+            let result=matched.length?`⚠️ 识别结果：疑似${type==='all'?'诈骗':type+'诈骗'}\n匹配关键词：${matched.join('、')}\n风险等级：高\n建议：立即停止联系，保存证据并报警`:`✅ 识别结果：未检测到明显诈骗特征\n风险等级：低\n建议：仍需提高警惕，核实身份后再资金往来`;
+            resDiv.textContent=result;
+            if(systemSettings.autoSave) addHistory('detect',result);
+        },1500);
+    }
+
+    // DeepSeek深度判定（复用聊天接口）
+    async function doubaoDeepDetect() {
+        let txt = document.getElementById('fraudText').value.trim();
+        if (!txt && identifyImages.length === 0) {
+            alert('请填写识别文本或上传图片');
+            return;
+        }
+        let resDiv = document.getElementById('detectResult');
+        resDiv.innerHTML = '<div class="loading-tip"><span class="loading-spin"></span>DeepSeek 深度分析中，请稍候...</div>';
+        resDiv.classList.add('show');
+        try {
+            const systemMsg = { role: "system", content: "你是一位资深反诈专家，请对用户提供的文本进行深度分析。分析内容包括：是否涉及诈骗、诈骗类型、风险等级（高/中/低）、具体手法、受害者应对建议。请用清晰的中文回答，适当使用标题和要点。" };
+            const userMsg = { role: "user", content: `请分析以下内容是否为诈骗：\n\n${txt}` };
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: [systemMsg, userMsg] })
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`服务器错误 ${response.status}: ${errText}`);
+            }
+            const data = await response.json();
+            const reply = data.choices?.[0]?.message?.content || data.content || "分析失败，请稍后重试。";
+            resDiv.textContent = `【DeepSeek深度判定】\n${reply}`;
+            if (systemSettings.autoSave) addHistory('detect', `DeepSeek深度判定：${reply.substring(0, 200)}`);
+        } catch (err) {
+            resDiv.textContent = `❌ 深度判定失败：${err.message}。请检查网络或后端配置。`;
+        }
+    }
+
+    function clearIdentify(){document.getElementById('fraudText').value='';document.getElementById('ocrResult').textContent='';document.getElementById('identifyPreview').innerHTML='';identifyImages=[];document.getElementById('detectResult').classList.remove('show');}
+    function fillToReport(){let res=document.getElementById('detectResult').textContent;if(!res){alert('请先进行诈骗识别');return;}document.getElementById('fraudDetail').value=res;switchPage('reportPage');}
+    function generateReport(){
+        let name=document.getElementById('name').value.trim()||'未填写', phone=document.getElementById('phone').value.trim()||'未填写', idType=document.getElementById('idType').value, idNo=document.getElementById('idNo').value.trim()||'未填写';
+        let time=document.getElementById('fraudTime').value.trim()||'未填写', fType=document.getElementById('fraudType').value.trim()||'未填写', platform=document.getElementById('fraudPlatform').value.trim()||'未填写';
+        let money=document.getElementById('fraudMoney').value.trim()||'0', otherName=document.getElementById('otherName').value.trim()||'暂无', otherAcc=document.getElementById('otherAccount').value.trim()||'暂无', detail=document.getElementById('fraudDetail').value.trim()||'无详细描述';
+        let report=`==================== 反诈报案材料 ====================\n报案人姓名：${name}\n联系电话：${phone}\n证件类型：${idType}\n证件号码：${idNo}\n\n被骗时间：${time}\n诈骗类型：${fType}\n被骗平台：${platform}\n被骗金额：¥${money}\n对方账号/昵称：${otherName}\n对方收款账号：${otherAcc}\n\n详细经过：\n${detail}\n\n证据图片：${reportImages.length}张\n=====================================================`;
+        let resultDiv=document.getElementById('reportResult'); resultDiv.textContent=report; resultDiv.classList.add('show');
+        if(systemSettings.autoSave) addHistory('report',report);
+    }
+    function copyReport(){let div=document.getElementById('reportResult');if(!div.classList.contains('show')){alert('请先生成报案材料');return;}navigator.clipboard.writeText(div.textContent).then(()=>alert('复制成功')).catch(()=>alert('复制失败'));}
+    function exportTxt(){let div=document.getElementById('reportResult');if(!div.classList.contains('show')){alert('请先生成报案材料');return;}let blob=new Blob([div.textContent],{type:'text/plain;charset=utf-8'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`报案材料_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
+    function exportPdf(){alert('PDF生成功能示例，完整实现需额外库');}
+    function addHistory(type,content){historyRecords.unshift({id:Date.now(),time:new Date().toLocaleString(),type,content});localStorage.setItem('fraudHistory',JSON.stringify(historyRecords));renderHistory();}
+    function renderHistory(){let list=document.getElementById('historyList');if(!historyRecords.length){list.innerHTML='<div class="history-empty">暂无历史记录</div>';return;}let html='';historyRecords.forEach(r=>{html+=`<div class="history-item"><div class="history-header"><span>${r.type==='detect'?'诈骗识别':'报案材料'}</span><span class="history-time">${r.time}</span></div><div class="history-content">${r.content.substring(0,100)}...</div></div>`;});list.innerHTML=html;}
+    function clearHistory(){if(confirm('清空所有历史记录？')){historyRecords=[];localStorage.removeItem('fraudHistory');renderHistory();}}
+    function initSettings(){document.getElementById('autoSaveSwitch').checked=systemSettings.autoSave;document.getElementById('defaultDesensitizeSwitch').checked=systemSettings.defaultDesensitize;}
+    function saveSettings(){systemSettings.autoSave=document.getElementById('autoSaveSwitch').checked;systemSettings.defaultDesensitize=document.getElementById('defaultDesensitizeSwitch').checked;localStorage.setItem('systemSettings',JSON.stringify(systemSettings));alert('设置已保存');}
+    function resetSettings(){systemSettings={autoSave:true,defaultDesensitize:true};initSettings();localStorage.setItem('systemSettings',JSON.stringify(systemSettings));alert('已恢复默认');}
+    function initChatModule(){
+        let send=document.getElementById('sendChatBtn'), input=document.getElementById('chatInput'), clear=document.getElementById('clearChatBtn');
+        if(send) send.addEventListener('click',sendUserMessage);
+        if(input) input.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendUserMessage();}});
+        if(clear) clear.addEventListener('click',()=>{if(confirm('清空对话记录？')){conversationHistory=[{role:"system",content:"你是反诈科普与思政教育智能助手，专为大学生服务。结合法治意识、诚信责任，解析诈骗套路，给出预防建议，语气温和专业。"}];document.getElementById('chatMessages').innerHTML=`<div class="message bot"><div class="message-avatar">🤖</div><div class="message-bubble">对话已清空，有任何反诈问题随时问我~</div></div>`;}});
+        let ta=document.getElementById('chatInput'); if(ta) ta.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';});
+    }
+    async function sendUserMessage(){
+        let inp=document.getElementById('chatInput'), msg=inp.value.trim(); if(!msg||isWaitingReply) return;
+        addMessageToUI('user',msg); inp.value=''; inp.style.height='auto'; isWaitingReply=true;
+        let sendBtn=document.getElementById('sendChatBtn'); if(sendBtn) sendBtn.disabled=true; showTypingIndicator();
+        try{
+            conversationHistory.push({role:"user",content:msg});
+            let res=await fetch('/api/chat', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({messages:conversationHistory.slice(-20)})
+            });
+            if(!res.ok){
+                let errText = await res.text();
+                throw new Error(`服务器错误 ${res.status}: ${errText}`);
+            }
+            let data=await res.json();
+            let reply = data.choices?.[0]?.message?.content || data.content || "抱歉，我无法回答这个问题。";
+            conversationHistory.push({role:"assistant",content:reply}); removeTypingIndicator(); addMessageToUI('bot',reply);
+        }catch(err){
+            removeTypingIndicator(); 
+            addMessageToUI('bot',`❌ 请求失败: ${err.message}。请确保已正确部署 Cloudflare Pages 后端并在环境变量中设置了 DEEPSEEK_API_KEY。`);
+        }
+        finally{isWaitingReply=false; if(sendBtn) sendBtn.disabled=false; let cont=document.getElementById('chatMessages'); if(cont) cont.scrollTop=cont.scrollHeight;}
+    }
+    function addMessageToUI(sender,text){let container=document.getElementById('chatMessages');if(!container)return;let div=document.createElement('div');div.className=`message ${sender==='user'?'user':'bot'}`;let avatar=document.createElement('div');avatar.className='message-avatar';avatar.textContent=sender==='user'?'我':'🤖';let bubble=document.createElement('div');bubble.className='message-bubble';bubble.textContent=text;div.appendChild(avatar);div.appendChild(bubble);container.appendChild(div);container.scrollTop=container.scrollHeight;}
+    function showTypingIndicator(){removeTypingIndicator();let container=document.getElementById('chatMessages');if(!container)return;let div=document.createElement('div');div.id='typingIndicator';div.className='message bot';div.innerHTML='<div class="message-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>';container.appendChild(div);container.scrollTop=container.scrollHeight;}
+    function removeTypingIndicator(){let ind=document.getElementById('typingIndicator');if(ind)ind.remove();}
+    function bindAllEvents(){
+        document.getElementById('startDetectBtn')?.addEventListener('click',detectFraud);
+        document.getElementById('doubaoBtn')?.addEventListener('click',doubaoDeepDetect);
+        document.getElementById('clearIdentifyBtn')?.addEventListener('click',clearIdentify);
+        document.getElementById('fillToReportBtn')?.addEventListener('click',fillToReport);
+        document.getElementById('parseBillBtn')?.addEventListener('click',parseBill);
+        document.getElementById('billToReportBtn')?.addEventListener('click',()=>{if(billData&&billData.parsed){document.getElementById('fraudMoney').value=billData.parsed.totalOut;switchPage('reportPage');}else alert('请先解析账单');});
+        document.getElementById('generateReportBtn')?.addEventListener('click',generateReport);
+        document.getElementById('copyReportBtn')?.addEventListener('click',copyReport);
+        document.getElementById('exportTxtBtn')?.addEventListener('click',exportTxt);
+        document.getElementById('exportPdfBtn')?.addEventListener('click',exportPdf);
+        document.getElementById('clearHistoryBtn')?.addEventListener('click',clearHistory);
+        document.getElementById('saveSettingBtn')?.addEventListener('click',saveSettings);
+        document.getElementById('resetSettingBtn')?.addEventListener('click',resetSettings);
+        document.querySelectorAll('.corpus-btn').forEach(btn=>btn.addEventListener('click',function(){document.querySelectorAll('.corpus-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');}));
+        document.getElementById('idType')?.addEventListener('change',function(){let label=document.getElementById('idNoLabel');if(this.value==='idcard') label.textContent='身份证号 *（18位，最后一位可为X）';else label.textContent='护照号码 *（请填写完整号码）';});
+    }
+</script>
+</body>
+</html>
