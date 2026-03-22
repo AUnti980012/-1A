@@ -19,6 +19,6 @@ Provide and operate complete prompt words and initial source code: Xin Firefly I
 Hello, welcome to use this assistant for anti fraud activities. 
 The project has been processed by AI and published. 
 We are not responsible for the distribution of AI products. 
-You can use it, but you must indicate that the source comes from yourself. 
+You can use it, but you must indicate that the source comes from my project. 
 The API library is Deepseek, and you can access your own API to work with it. 
 The Deepseek chat model is used by default.
