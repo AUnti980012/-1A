@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>反诈智能识别与报案辅助系统 · 东北电力大学</title>
-    <!-- 国内稳定CDN (移除Tesseract，保留必要库) -->
+    <!-- 核心库 -->
     <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- 稳定OCR引擎：Tesseract.js (支持中英文，无需后端) -->
+    <script src="https://unpkg.com/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -43,7 +45,6 @@
             --transition-normal: all var(--animate-speed) var(--ease-soft);
             --transition-fast: all 0.2s var(--ease-soft);
         }
-        /* ==================== 加载进度条样式 ==================== */
         .loader-container {
             position: fixed;
             top: 0;
@@ -71,7 +72,6 @@
             background: var(--light-gray);
             border-radius: 6px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .progress-bar {
             height: 100%;
@@ -85,14 +85,12 @@
             color: var(--dark-gray);
             font-size: 14px;
         }
-        /* ==================== 全局固定头部 & 底部 ==================== */
         body {
             background: var(--bg);
             color: var(--deep-gray);
-            padding-bottom: 70px;  /* 为底部footer留空间 */
+            padding-bottom: 70px;
             touch-action: manipulation;
         }
-        /* 全局头部 */
         .global-header {
             position: sticky;
             top: 0;
@@ -102,7 +100,6 @@
             padding: 15px 20px;
             width: 100%;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            transition: var(--transition-normal);
         }
         .header-content {
             max-width: 1200px;
@@ -123,15 +120,12 @@
             font-size: 20px;
             font-weight: 700;
             margin-bottom: 6px;
-            animation: fadeInUpBig 0.4s ease forwards;
             line-height: 1.3;
         }
         .header-sub {
             font-size: 12px;
             opacity: 0.8;
-            animation: fadeInUpBig 0.4s ease 0.1s forwards;
         }
-        /* 右侧东北电力大学大字 */
         .univ-brand {
             font-size: 48px;
             font-weight: 800;
@@ -142,36 +136,18 @@
             color: transparent;
             text-shadow: 0 2px 4px rgba(0,0,0,0.2);
             white-space: nowrap;
-            transition: var(--transition-fast);
-            font-family: "Microsoft YaHei", "PingFang SC", "黑体", sans-serif;
         }
         @media (max-width: 680px) {
-            .univ-brand {
-                font-size: 32px;
-                letter-spacing: 1px;
-                white-space: normal;
-                text-align: right;
-            }
-            .header-title {
-                font-size: 18px;
-            }
+            .univ-brand { font-size: 32px; white-space: normal; text-align: right; }
+            .header-title { font-size: 18px; }
         }
         @media (max-width: 480px) {
-            .univ-brand {
-                font-size: 16px;
-                font-weight: 700;
-            }
-            .header-top {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .univ-brand {
-                align-self: flex-end;
-            }
+            .univ-brand { font-size: 16px; font-weight: 700; }
+            .header-top { flex-direction: column; align-items: flex-start; }
+            .univ-brand { align-self: flex-end; }
         }
         .nav-wrapper {
             position: relative;
-            animation: fadeInUpBig 0.4s ease 0.2s forwards;
         }
         .nav {
             display: flex;
@@ -192,22 +168,13 @@
             font-weight: 500;
             white-space: nowrap;
             min-height: 44px;
-            min-width: fit-content;
             transition: var(--transition-normal);
-            pointer-events: auto !important;
-        }
-        .nav-btn:hover {
-            background: rgba(255,255,255,0.3);
-            transform: translateY(-2px);
         }
         .nav-btn.active {
             background: var(--white);
             color: var(--primary);
             font-weight: 700;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .nav-btn:active {
-            transform: scale(0.97);
         }
         .nav-underline {
             position: absolute;
@@ -216,19 +183,14 @@
             background: var(--white);
             border-radius: 999px;
             transition: left 0.2s var(--ease-soft), width 0.2s var(--ease-soft);
-            z-index: 10;
         }
-        /* ==================== 页面容器样式 ==================== */
         .page {
             display: none;
             width: 100%;
             min-height: calc(100vh - 140px);
             animation: pageFadeIn 0.6s var(--ease-soft) forwards;
         }
-        .page.active {
-            display: block;
-        }
-        /* ==================== 全局动画 ==================== */
+        .page.active { display: block; }
         @keyframes pageFadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -241,29 +203,10 @@
             from { opacity: 0; transform: translateY(var(--animate-normal)); }
             to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-        @keyframes shake {
-            0%,100% { transform: translateX(0); }
-            20% { transform: translateX(-8px); }
-            40% { transform: translateX(8px); }
-            60% { transform: translateX(-4px); }
-            80% { transform: translateX(4px); }
-        }
-        @keyframes ripple {
-            to { transform: scale(6); opacity: 0; }
-        }
-        @keyframes formItemFadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        /* ==================== 主内容区 ==================== */
         .container {
             max-width: 1200px;
             margin: 20px auto;
@@ -286,9 +229,7 @@
             margin-bottom: 20px;
             font-weight: 700;
             width: fit-content;
-            animation: fadeInUpBig 0.3s ease 0.1s forwards;
         }
-        /* ==================== 反诈对话助手样式 ==================== */
         .chat-card {
             background: #ffffff;
             border-radius: var(--radius-lg);
@@ -296,22 +237,15 @@
             margin-bottom: 30px;
             overflow: hidden;
             border: 1px solid var(--light-gray);
-            animation: fadeInUpBig 0.5s ease forwards;
         }
         .chat-header {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             padding: 14px 18px;
             color: white;
             font-weight: 600;
-            font-size: 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-        }
-        .chat-header span {
-            font-size: 12px;
-            opacity: 0.9;
         }
         .chat-clear-btn {
             background: rgba(255,255,255,0.2);
@@ -319,13 +253,7 @@
             color: white;
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
             cursor: pointer;
-            transition: 0.2s;
-        }
-        .chat-clear-btn:hover {
-            background: rgba(255,255,255,0.4);
-            transform: scale(0.96);
         }
         .chat-messages {
             height: 360px;
@@ -340,28 +268,19 @@
             display: flex;
             align-items: flex-start;
             gap: 8px;
-            animation: fadeInUpBig 0.2s ease;
             max-width: 85%;
         }
-        .message.user {
-            align-self: flex-end;
-            flex-direction: row-reverse;
-        }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
         .message-bubble {
             background: white;
             padding: 10px 14px;
             border-radius: 18px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
             font-size: 14px;
             line-height: 1.5;
             word-break: break-word;
             border: 1px solid var(--light-gray);
         }
-        .message.user .message-bubble {
-            background: var(--primary);
-            color: white;
-            border: none;
-        }
+        .message.user .message-bubble { background: var(--primary); color: white; border: none; }
         .message-avatar {
             width: 32px;
             height: 32px;
@@ -370,13 +289,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
             flex-shrink: 0;
-        }
-        .message.user .message-avatar {
-            background: var(--primary-light);
-            color: white;
         }
         .chat-input-area {
             display: flex;
@@ -393,15 +306,10 @@
             padding: 10px 16px;
             font-size: 14px;
             outline: none;
-            transition: 0.2s;
             resize: none;
             min-height: 42px;
-            font-family: inherit;
         }
-        .chat-input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(217,33,33,0.1);
-        }
+        .chat-input:focus { border-color: var(--primary); }
         .chat-send-btn {
             background: var(--primary);
             border: none;
@@ -410,16 +318,7 @@
             border-radius: 30px;
             font-weight: 500;
             cursor: pointer;
-            transition: var(--transition-fast);
             min-width: 70px;
-            min-height: 42px;
-        }
-        .chat-send-btn:active {
-            transform: scale(0.96);
-        }
-        .chat-send-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
         }
         .typing-indicator {
             display: flex;
@@ -434,39 +333,53 @@
             height: 6px;
             background: #6c757d;
             border-radius: 50%;
-            animation: typingBounce 1.4s infinite ease-in-out;
+            animation: typingBounce 1.4s infinite;
         }
-        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
         @keyframes typingBounce {
-            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            0%,80%,100% { transform: scale(0); opacity: 0.5; }
             40% { transform: scale(1); opacity: 1; }
         }
-        /* ==================== 通用表单样式 ==================== */
-        input, textarea, select {
+        /* 表单样式修正：label在上方或左侧清晰 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: var(--deep-gray);
+        }
+        .form-group label .required-star {
+            color: var(--danger);
+            margin-left: 2px;
+        }
+        .form-group input, .form-group select, .form-group textarea {
             width: 100%;
-            padding: 10px;
+            padding: 10px 12px;
             border: 1px solid var(--mid-gray);
             border-radius: var(--radius-sm);
             font-size: 14px;
-            margin-bottom: 15px;
-            outline: none;
-            transition: var(--transition-normal);
+            transition: var(--transition-fast);
             background: var(--white);
-            min-height: 44px;
-            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
-            animation-delay: calc(var(--item-index, 0) * 0.05s);
-            opacity: 0;
         }
-        input:focus, textarea:focus, select:focus {
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(217, 33, 33, 0.08);
-            transform: translateY(-2px) scale(1.01);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(217,33,33,0.1);
         }
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-            line-height: 1.6;
+        .error-message {
+            color: var(--danger);
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+        .form-group.error input, .form-group.error textarea, .form-group.error select {
+            border-color: var(--danger);
+            background-color: #fff2f0;
+        }
+        .form-group.error .error-message {
+            display: block;
         }
         .btn {
             padding: 10px 20px;
@@ -476,45 +389,17 @@
             cursor: pointer;
             font-weight: 500;
             min-height: 44px;
-            min-width: 80px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             transition: var(--transition-normal);
-            pointer-events: auto !important;
-            position: relative;
-            overflow: hidden;
-            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
-            animation-delay: calc(var(--item-index, 0) * 0.05s);
-            opacity: 0;
-        }
-        .btn .ripple {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.3);
-            transform: scale(0);
-            animation: ripple 0.6s linear;
-            pointer-events: none;
-        }
-        .btn:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        .btn:active {
-            transform: translateY(0) scale(0.98);
         }
         .btn-primary { background: var(--primary); color: var(--white); }
-        .btn-primary:hover { background: var(--primary-light); }
         .btn-default { background: var(--light-gray); color: var(--deep-gray); }
         .btn-success { background: var(--green); color: var(--white); }
         .btn-export { background: var(--blue); color: var(--white); }
         .btn-pdf { background: var(--purple); color: var(--white); }
-        .btn-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 15px 0;
-        }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 15px 0; }
         .upload-area {
             border: 2px dashed var(--mid-gray);
             border-radius: var(--radius-md);
@@ -522,23 +407,11 @@
             text-align: center;
             cursor: pointer;
             margin: 15px 0;
-            transition: var(--transition-normal);
             background: var(--bg);
-            animation: formItemFadeIn 0.3s var(--ease-soft) forwards;
-            animation-delay: calc(var(--item-index, 0) * 0.05s);
-            opacity: 0;
+            transition: var(--transition-normal);
         }
-        .upload-area:hover {
-            border-color: var(--primary);
-            transform: translateY(-3px) scale(1.01);
-            background: rgba(217, 33, 33, 0.02);
-        }
-        .upload-area.dragover {
-            border-color: var(--blue);
-            background: #f0f8ff;
-            transform: scale(1.02);
-            border-style: solid;
-        }
+        .upload-area:hover { border-color: var(--primary); background: rgba(217,33,33,0.02); }
+        .upload-area.dragover { border-color: var(--blue); background: #f0f8ff; }
         .upload-area input { display: none; }
         .preview {
             display: flex;
@@ -553,20 +426,8 @@
             overflow: hidden;
             border: 2px solid transparent;
             position: relative;
-            transition: var(--transition-normal);
-            animation: fadeInUpBig 0.3s var(--ease-bounce) forwards;
-            animation-delay: calc(var(--item-index, 0) * 0.05s);
-            opacity: 0;
         }
-        .preview-item:hover {
-            transform: scale(1.1);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .preview-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        .preview-item img { width: 100%; height: 100%; object-fit: cover; }
         .preview-del {
             position: absolute;
             top: 0;
@@ -581,15 +442,9 @@
             justify-content: center;
             font-size: 12px;
             cursor: pointer;
-            z-index: 10;
             opacity: 0;
-            transform: scale(0.8);
-            transition: var(--transition-normal);
         }
-        .preview-item:hover .preview-del {
-            opacity: 1;
-            transform: scale(1);
-        }
+        .preview-item:hover .preview-del { opacity: 1; }
         .result-box {
             background: #f9f9f9;
             padding: 0;
@@ -607,7 +462,6 @@
             opacity: 1;
             max-height: 2000px;
             padding: 15px;
-            animation: fadeInUpBig 0.3s ease forwards;
         }
         .notice {
             background: #fff7e6;
@@ -615,14 +469,8 @@
             padding: 12px 15px;
             border-radius: var(--radius-sm);
             margin: 15px 0;
-            line-height: 1.5;
         }
-        .tip {
-            font-size: 12px;
-            color: var(--dark-gray);
-            margin: 5px 0 10px;
-            line-height: 1.5;
-        }
+        .tip { font-size: 12px; color: var(--dark-gray); margin: 5px 0 10px; }
         .loading-tip {
             color: var(--blue);
             margin: 10px 0;
@@ -651,13 +499,6 @@
             border-radius: 4px;
             background: var(--white);
             cursor: pointer;
-            font-size: 14px;
-            transition: var(--transition-fast);
-        }
-        .corpus-btn:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-            transform: translateY(-1px);
         }
         .corpus-btn.active {
             background: var(--primary);
@@ -672,15 +513,7 @@
             cursor: pointer;
             width: fit-content;
         }
-        .switch input {
-            width: auto;
-            margin: 0;
-            cursor: pointer;
-            min-height: auto;
-            accent-color: var(--primary);
-            animation: none;
-            opacity: 1;
-        }
+        .switch input { width: auto; margin: 0; accent-color: var(--primary); }
         .home-btns {
             display: flex;
             justify-content: center;
@@ -688,48 +521,18 @@
             gap: 10px;
             margin-top: 40px;
         }
-        .form-item.error input,
-        .form-item.error textarea {
-            border-color: var(--danger);
-            animation: shake 0.4s var(--ease-soft);
-        }
-        .error-tip {
-            display: none;
-        }
-        .form-item.error .error-tip {
-            display: block;
-            color: var(--danger);
-            font-size: 12px;
-            margin: -10px 0 15px;
-        }
         .history-item {
             background: var(--light-gray);
             border-radius: var(--radius-md);
             padding: 15px;
             margin-bottom: 10px;
-            transition: var(--transition-normal);
-        }
-        .history-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .history-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
             margin-bottom: 10px;
-            padding-bottom: 5px;
             border-bottom: 1px solid var(--mid-gray);
-        }
-        .history-time {
-            font-size: 12px;
-            color: var(--dark-gray);
-        }
-        .history-empty {
-            text-align: center;
-            color: var(--dark-gray);
-            padding: 40px 0;
-            font-size: 14px;
+            padding-bottom: 5px;
         }
         .setting-item {
             display: flex;
@@ -738,11 +541,6 @@
             padding: 15px 0;
             border-bottom: 1px solid var(--light-gray);
         }
-        .setting-label {
-            font-size: 14px;
-            font-weight: 500;
-        }
-        /* 全局底部 */
         .global-footer {
             position: fixed;
             bottom: 0;
@@ -752,22 +550,14 @@
             background: var(--light-gray);
             border-top: 1px solid var(--mid-gray);
             font-size: 12px;
-            color: var(--dark-gray);
             text-align: center;
-            line-height: 1.5;
             z-index: 999;
         }
         @media (max-width:768px) {
-            .global-header { padding: 15px 16px; }
             .container { padding: 0 16px; margin: 16px auto; }
             .page-content { padding: 15px; }
-            .nav { flex-wrap: nowrap; overflow-x: auto; }
-            .btn-group { flex-direction: column; gap: 10px; }
+            .btn-group { flex-direction: column; }
             .btn { width: 100%!important; }
-            .home-btns { flex-direction: column; align-items: center; }
-            .home-btns .btn { width: 90%!important; }
-            .preview-item { width: 70px; height: 70px; }
-            input, textarea, select { font-size: 16px; }
             .chat-messages { height: 280px; }
             .message { max-width: 95%; }
         }
@@ -776,13 +566,10 @@
 <body>
 <div class="loader-container" id="loader">
     <div class="loader-title">反诈智能识别与报案辅助系统</div>
-    <div class="progress-bar-container">
-        <div class="progress-bar" id="progressBar"></div>
-    </div>
+    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
     <div class="progress-text" id="progressText">加载中... 0%</div>
 </div>
 
-<!-- 全局头部（固定不动） -->
 <div class="global-header">
     <div class="header-content">
         <div class="header-top">
@@ -806,7 +593,7 @@
     </div>
 </div>
 
-<!-- 页面容器 -->
+<!-- 首页 -->
 <div class="page" id="homePage">
     <div class="container">
         <div class="page-content">
@@ -825,178 +612,235 @@
     </div>
 </div>
 
+<!-- 诈骗识别 -->
 <div class="page" id="identifyPage">
     <div class="container">
         <div class="page-content">
             <div class="page-title">诈骗识别</div>
-            <div class="corpus-btns">
-                <button class="corpus-btn active" data-type="all">全类型诈骗</button>
-                <button class="corpus-btn" data-type="police">公安诈骗</button>
-                <button class="corpus-btn" data-type="loan">贷款诈骗</button>
-                <button class="corpus-btn" data-type="service">冒充客服</button>
-                <button class="corpus-btn" data-type="leader">冒充领导熟人</button>
-            </div>
-            <textarea id="fraudText" placeholder="可直接粘贴短信、聊天记录等文本内容（也可只上传图片）" style="--item-index: 1;"></textarea>
-            <div class="tip">提示：文本和图片二选一即可，也可同时填写/上传。图片将使用DeepSeek视觉能力自动提取文字</div>
-            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 2;">上传证据图片（聊天/转账截图，DeepSeek自动OCR提取）</div>
-            <div class="upload-area" id="identifyUpload" style="--item-index: 3;">点击或拖拽上传图片（JPG/PNG）<input type="file" id="identifyFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
+            <div class="corpus-btns"><button class="corpus-btn active" data-type="all">全类型诈骗</button><button class="corpus-btn" data-type="police">公安诈骗</button><button class="corpus-btn" data-type="loan">贷款诈骗</button><button class="corpus-btn" data-type="service">冒充客服</button><button class="corpus-btn" data-type="leader">冒充领导熟人</button></div>
+            <textarea id="fraudText" placeholder="可直接粘贴短信、聊天记录等文本内容（也可只上传图片）" rows="4"></textarea>
+            <div class="tip">📸 上传图片后系统将自动使用 Tesseract OCR (本地引擎) 提取文字，稳定无后端依赖，支持中英文</div>
+            <div class="upload-area" id="identifyUpload">📂 点击或拖拽上传图片（JPG/PNG）<input type="file" id="identifyFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
             <div id="identifyPreview" class="preview"></div>
             <div id="ocrResult" class="tip"></div>
-            <div class="switch" style="--item-index: 4;"><input type="checkbox" id="desensitizeSwitch" checked><label>自动脱敏（手机号/身份证/银行卡）</label></div>
+            <div class="switch"><input type="checkbox" id="desensitizeSwitch" checked><label>自动脱敏（手机号/身份证/银行卡）</label></div>
             <div class="btn-group">
-                <button class="btn btn-primary" id="startDetectBtn" style="--item-index: 5;">开始识别</button>
-                <button class="btn btn-doubao" id="doubaoBtn" style="--item-index: 6;">DeepSeek深度判定</button>
-                <button class="btn btn-default" id="clearIdentifyBtn" style="--item-index: 7;">清空</button>
-                <button class="btn btn-success" id="fillToReportBtn" style="--item-index: 8;">一键填到报案表</button>
+                <button class="btn btn-primary" id="startDetectBtn">开始识别</button>
+                <button class="btn btn-doubao" id="doubaoBtn">DeepSeek深度判定</button>
+                <button class="btn btn-default" id="clearIdentifyBtn">清空</button>
+                <button class="btn btn-success" id="fillToReportBtn">一键填到报案表</button>
             </div>
             <div id="detectResult" class="result-box"></div>
         </div>
     </div>
 </div>
 
+<!-- 账单导入 -->
 <div class="page" id="billPage">
     <div class="container">
         <div class="page-content">
             <div class="page-title">账单导入</div>
-            <div class="notice">支持微信/支付宝官方导出的CSV/Excel格式账单，自动识别支出记录，计算总支出金额，一键导入报案填报模块</div>
-            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 1;">微信/支付宝账单导入</div>
-            <div class="upload-area" id="billUpload" style="--item-index: 2;">点击或拖拽上传账单文件<input type="file" id="billFile" accept=".csv,.xlsx,.xls"></div>
+            <div class="notice">支持微信/支付宝官方导出的CSV/Excel格式账单，自动识别支出记录，计算总支出金额</div>
+            <div class="upload-area" id="billUpload">📎 点击或拖拽上传账单文件<input type="file" id="billFile" accept=".csv,.xlsx,.xls"></div>
             <div id="billResult" class="result-box"></div>
-            <div class="btn-group"><button class="btn btn-primary" id="parseBillBtn" style="--item-index: 3;">解析账单</button><button class="btn btn-success" id="billToReportBtn" style="--item-index: 4;">导入报案表</button></div>
+            <div class="btn-group"><button class="btn btn-primary" id="parseBillBtn">解析账单</button><button class="btn btn-success" id="billToReportBtn">导入报案表</button></div>
         </div>
     </div>
 </div>
 
+<!-- 报案填报（修正布局，增加校验） -->
 <div class="page" id="reportPage">
     <div class="container">
         <div class="page-content">
             <div class="page-title">报案填报</div>
-            <div class="notice">1. 带 <span style="color: var(--danger); font-weight: bold;">*</span> 为必填项，请认真填写真实信息<br>2. 证据图片请上传清晰的聊天、转账截图<br>3. 证件号码请按真实格式填写</div>
-            <div class="form-item"><input type="text" id="name" placeholder="请填写真实姓名" style="--item-index: 1;"><label>报案人姓名 *</label><div class="error-tip">请填写报案人姓名</div></div>
-            <div class="form-item"><input type="text" id="phone" placeholder="请填写11位手机号" style="--item-index: 2;"><label>联系电话 *</label><div class="error-tip">请填写正确的11位手机号</div></div>
-            <div class="form-item"><select id="idType" style="--item-index: 3;"><option value="idcard">身份证</option><option value="passport">外国护照</option></select><label>证件类型</label></div>
-            <div class="form-item"><input type="text" id="idNo" placeholder="请填写证件号码" style="--item-index: 4;"><label id="idNoLabel">身份证号 *（18位，最后一位可为X）</label><div class="error-tip">请填写正确的证件号码</div></div>
-            <div class="form-item"><input type="text" id="fraudTime" placeholder="例：2026-03-14 15:30" style="--item-index: 5;"><label>被骗时间 *</label><div class="error-tip">请填写被骗时间</div></div>
-            <div class="form-item"><input type="text" id="fraudType" placeholder="例：刷单返利、冒充客服等" style="--item-index: 6;"><label>诈骗类型 *</label><div class="error-tip">请填写诈骗类型</div></div>
-            <div class="form-item"><input type="text" id="fraudPlatform" placeholder="例：微信、抖音、陌生APP" style="--item-index: 7;"><label>被骗平台/渠道 *</label><div class="error-tip">请填写被骗平台/渠道</div></div>
-            <div class="form-item"><input type="text" id="fraudMoney" placeholder="填写阿拉伯数字" style="--item-index: 8;"><label>被骗总金额 *</label><div class="error-tip">请填写正确的被骗金额</div></div>
-            <div class="form-item"><input type="text" id="otherName" placeholder="无则填暂无" style="--item-index: 9;"><label>对方账号/昵称</label></div>
-            <div class="form-item"><input type="text" id="otherAccount" placeholder="无则填暂无" style="--item-index: 10;"><label>对方收款账号</label></div>
-            <div class="form-item"><textarea id="fraudDetail" placeholder="请详细描述：对方如何联系、如何诱导、转账过程等" style="--item-index: 11;"></textarea><label>被骗详细经过 *</label><div class="error-tip">请填写被骗详细经过</div></div>
-            <div style="font-weight: 500; margin-bottom: 8px; --item-index: 12;">证据图片上传</div>
-            <div class="upload-area" id="reportUpload" style="--item-index: 13;">点击或拖拽上传证据图片<input type="file" id="reportFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
-            <div id="reportPreview" class="preview"></div>
-            <div class="btn-group"><button class="btn btn-primary" id="generateReportBtn" style="--item-index: 14;">生成报案材料</button><button class="btn btn-default" id="copyReportBtn" style="--item-index: 15;">复制全文</button><button class="btn btn-export" id="exportTxtBtn" style="--item-index: 16;">导出TXT</button><button class="btn btn-pdf" id="exportPdfBtn" style="--item-index: 17;">生成PDF文件</button></div>
+            <div class="notice">带 <span style="color:var(--danger);font-weight:bold;">*</span> 为必填项，请认真填写真实信息；支持生成PDF报案材料。</div>
+            <div class="form-group" id="formName">
+                <label>报案人姓名 <span class="required-star">*</span></label>
+                <input type="text" id="name" placeholder="请填写真实姓名">
+                <div class="error-message">请填写报案人姓名</div>
+            </div>
+            <div class="form-group" id="formPhone">
+                <label>联系电话 <span class="required-star">*</span></label>
+                <input type="tel" id="phone" placeholder="请填写11位手机号">
+                <div class="error-message">请填写正确的11位手机号码</div>
+            </div>
+            <div class="form-group">
+                <label>证件类型</label>
+                <select id="idType">
+                    <option value="idcard">身份证</option>
+                    <option value="passport">外国护照</option>
+                </select>
+            </div>
+            <div class="form-group" id="formIdNo">
+                <label id="idNoLabel">身份证号 <span class="required-star">*</span></label>
+                <input type="text" id="idNo" placeholder="18位，最后一位可为X">
+                <div class="error-message">请填写正确的身份证号码(18位数字或最后一位X)</div>
+            </div>
+            <div class="form-group" id="formTime">
+                <label>被骗时间 <span class="required-star">*</span></label>
+                <input type="text" id="fraudTime" placeholder="例：2026-03-14 15:30">
+                <div class="error-message">请填写被骗时间</div>
+            </div>
+            <div class="form-group" id="formType">
+                <label>诈骗类型 <span class="required-star">*</span></label>
+                <input type="text" id="fraudType" placeholder="例：刷单返利、冒充客服等">
+                <div class="error-message">请填写诈骗类型</div>
+            </div>
+            <div class="form-group" id="formPlatform">
+                <label>被骗平台/渠道 <span class="required-star">*</span></label>
+                <input type="text" id="fraudPlatform" placeholder="例：微信、抖音、陌生APP">
+                <div class="error-message">请填写被骗平台/渠道</div>
+            </div>
+            <div class="form-group" id="formMoney">
+                <label>被骗总金额(元) <span class="required-star">*</span></label>
+                <input type="text" id="fraudMoney" placeholder="阿拉伯数字，如 3500">
+                <div class="error-message">请填写有效的金额数字</div>
+            </div>
+            <div class="form-group">
+                <label>对方账号/昵称</label>
+                <input type="text" id="otherName" placeholder="无则填暂无">
+            </div>
+            <div class="form-group">
+                <label>对方收款账号</label>
+                <input type="text" id="otherAccount" placeholder="无则填暂无">
+            </div>
+            <div class="form-group" id="formDetail">
+                <label>被骗详细经过 <span class="required-star">*</span></label>
+                <textarea id="fraudDetail" rows="4" placeholder="请详细描述：对方如何联系、如何诱导、转账过程等"></textarea>
+                <div class="error-message">请填写被骗详细经过</div>
+            </div>
+            <div class="form-group">
+                <label>证据图片上传</label>
+                <div class="upload-area" id="reportUpload">📷 点击或拖拽上传证据图片<input type="file" id="reportFile" accept="image/jpg,image/jpeg,image/png" multiple></div>
+                <div id="reportPreview" class="preview"></div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="generateReportBtn">生成报案材料</button>
+                <button class="btn btn-default" id="copyReportBtn">复制全文</button>
+                <button class="btn btn-export" id="exportTxtBtn">导出TXT</button>
+                <button class="btn btn-pdf" id="exportPdfBtn">生成PDF文件</button>
+            </div>
             <div id="reportResult" class="result-box"></div>
         </div>
     </div>
 </div>
 
-<div class="page" id="historyPage">
-    <div class="container">
-        <div class="page-content">
-            <div class="page-title">历史记录</div>
-            <div id="historyList"><div class="history-empty">暂无历史记录</div></div>
-            <div class="btn-group" style="margin-top: 20px;"><button class="btn btn-default" id="clearHistoryBtn">清空所有记录</button></div>
-        </div>
-    </div>
-</div>
-
-<div class="page" id="settingPage">
-    <div class="container">
-        <div class="page-content">
-            <div class="page-title">系统设置</div>
-            <div class="setting-item"><div class="setting-label">自动保存历史记录</div><div class="switch"><input type="checkbox" id="autoSaveSwitch" checked><label></label></div></div>
-            <div class="setting-item"><div class="setting-label">默认开启自动脱敏</div><div class="switch"><input type="checkbox" id="defaultDesensitizeSwitch" checked><label></label></div></div>
-            <div class="btn-group" style="margin-top: 30px;"><button class="btn btn-primary" id="saveSettingBtn">保存设置</button><button class="btn btn-default" id="resetSettingBtn">恢复默认</button></div>
-        </div>
-    </div>
-</div>
-
-<div id="pdfTempContainer"></div>
-<div class="global-footer">© 2025 反诈智能识别与报案辅助系统 | 创意来自东北电力大学易班工作站-Firefly TYPE IV | AI引擎: DeepSeek</div>
+<!-- 历史记录/设置 -->
+<div class="page" id="historyPage"><div class="container"><div class="page-content"><div class="page-title">历史记录</div><div id="historyList"></div><button class="btn btn-default" id="clearHistoryBtn">清空所有记录</button></div></div></div>
+<div class="page" id="settingPage"><div class="container"><div class="page-content"><div class="page-title">系统设置</div><div class="setting-item"><div class="setting-label">自动保存历史记录</div><div class="switch"><input type="checkbox" id="autoSaveSwitch" checked></div></div><div class="setting-item"><div class="setting-label">默认开启自动脱敏</div><div class="switch"><input type="checkbox" id="defaultDesensitizeSwitch" checked></div></div><div class="btn-group"><button class="btn btn-primary" id="saveSettingBtn">保存设置</button><button class="btn btn-default" id="resetSettingBtn">恢复默认</button></div></div></div></div>
+<div class="global-footer">© 2026 反诈智能识别与报案辅助系统 | 创意来自东北电力大学易班工作站 | AI引擎: DeepSeek + Tesseract OCR 作者Xin PR,Liu A Green,Wang A Black 保留著作权</div>
 
 <script>
-    // ============ 适配 Cloudflare Pages 后端代理，所有AI均使用DeepSeek ============
+    // ----- 全局变量 -----
     let identifyImages = [], reportImages = [], billData = null;
     let historyRecords = JSON.parse(localStorage.getItem('fraudHistory')) || [];
     let systemSettings = JSON.parse(localStorage.getItem('systemSettings')) || { autoSave: true, defaultDesensitize: true };
     let conversationHistory = [{ role: "system", content: "你是反诈科普与思政教育智能助手，专为大学生服务。结合法治意识、诚信责任，解析诈骗套路，给出预防建议，语气温和专业。" }];
     let isWaitingReply = false;
 
-    window.onload = function() {
-        const loader = document.getElementById('loader'), progressBar = document.getElementById('progressBar'), progressText = document.getElementById('progressText');
-        const steps = [20,40,60,80,100], texts = ['加载核心组件...','初始化AI服务...','加载账单解析模块...','加载本地存储数据...','加载完成！'];
-        let idx=0;
-        const interval = setInterval(() => {
-            if(idx>=steps.length){
-                clearInterval(interval);
-                loader.style.opacity='0';
-                setTimeout(()=>{
-                    loader.style.display='none';
-                    document.getElementById('homePage').classList.add('active');
-                    initGlobalNav();
-                    initSettings();
-                    renderHistory();
-                    initImageUpload();
-                    bindAllEvents();
-                    initChatModule();
-                    window.addEventListener('resize', ()=>updateGlobalUnderline());
-                    setTimeout(updateGlobalUnderline,100);
-                },400);
-                return;
-            }
-            progressBar.style.width=`${steps[idx]}%`;
-            progressText.textContent=`${texts[idx]} ${steps[idx]}%`;
-            idx++;
-        },300);
-    };
+    // 辅助函数
+    function desensitizeText(text) {
+        return text.replace(/(\d{3})\d{4}(\d{4})/g, '$1****$2')
+                   .replace(/(\d{6})\d{8,10}(\d{4})/g, '$1***********$2')
+                   .replace(/(\d{17}[\dXx]|\d{15})/g, (m) => m.slice(0,6)+'********'+m.slice(-4));
+    }
 
-    function initGlobalNav(){
-        const nav=document.getElementById('globalNav'), underline=document.getElementById('globalNavUnderline');
-        const btns=nav.querySelectorAll('.nav-btn');
-        btns.forEach(btn=>{
-            btn.addEventListener('click',()=>{
-                btns.forEach(b=>b.classList.remove('active'));
-                btn.classList.add('active');
-                updateNavUnderline(btn,underline);
-                switchPage(btn.getAttribute('data-target'));
-            });
-        });
-        const active=nav.querySelector('.nav-btn.active');
-        if(active) updateNavUnderline(active,underline);
+    // OCR 使用 Tesseract
+    async function ocrWithTesseract(file) {
+        const { data: { text } } = await Tesseract.recognize(file, 'chi_sim+eng');
+        return text.trim();
     }
-    function updateNavUnderline(btn,underline){
-        if(!btn||!underline) return;
-        const rect=btn.getBoundingClientRect(), parentRect=btn.parentElement.getBoundingClientRect();
-        underline.style.width=`${rect.width}px`;
-        underline.style.left=`${rect.left-parentRect.left}px`;
-    }
-    function updateGlobalUnderline(){
-        const nav=document.getElementById('globalNav'), underline=document.getElementById('globalNavUnderline');
-        const active=nav.querySelector('.nav-btn.active');
-        if(active) updateNavUnderline(active,underline);
-    }
-    function switchPage(pageId){
-        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-        document.getElementById(pageId).classList.add('active');
-        const navBtn=document.querySelector(`#globalNav .nav-btn[data-target="${pageId}"]`);
-        if(navBtn){
-            document.querySelectorAll('#globalNav .nav-btn').forEach(b=>b.classList.remove('active'));
-            navBtn.classList.add('active');
-            updateGlobalUnderline();
+    async function ocrImagesWithTesseract(images) {
+        if(!images.length) return;
+        let ocrDiv = document.getElementById('ocrResult');
+        let fraudTextarea = document.getElementById('fraudText');
+        let allText = [];
+        for(let i=0; i<images.length; i++) {
+            ocrDiv.innerHTML = `<div class="loading-tip"><span class="loading-spin"></span> OCR识别图片 ${i+1}/${images.length} ...</div>`;
+            try {
+                const recognized = await ocrWithTesseract(images[i].file);
+                if(recognized) allText.push(`【图片${i+1}】\n${recognized}`);
+            } catch(err) { allText.push(`【图片${i+1}】识别失败`); }
         }
-        setTimeout(updateGlobalUnderline,50);
+        let combined = allText.join('\n\n');
+        if(document.getElementById('desensitizeSwitch').checked) combined = desensitizeText(combined);
+        fraudTextarea.value = fraudTextarea.value ? fraudTextarea.value + "\n\n" + combined : combined;
+        ocrDiv.innerHTML = `✅ Tesseract OCR 完成，已填入文本框。`;
     }
-    document.querySelectorAll('[data-goto]').forEach(btn=>btn.addEventListener('click',()=>switchPage(btn.getAttribute('data-goto'))));
 
-    // 图片上传与OCR (使用DeepSeek视觉)
-    function initImageUpload(){
-        initUpload('identifyUpload','identifyFile','identifyPreview',(files)=>{identifyImages=files; if(files.length) ocrImagesWithDeepSeek(files);});
-        initUpload('reportUpload','reportFile','reportPreview',(files)=>reportImages=files);
-        initBillUpload('billUpload','billFile');
+    // 表单验证
+    function validateReportForm() {
+        let isValid = true;
+        // 姓名
+        let name = document.getElementById('name').value.trim();
+        if(!name) { markError('formName', true); isValid=false; } else markError('formName', false);
+        // 手机号 11位数字
+        let phone = document.getElementById('phone').value.trim();
+        let phoneReg = /^1[0-9]{10}$/;
+        if(!phone || !phoneReg.test(phone)) { markError('formPhone', true); isValid=false; } else markError('formPhone', false);
+        // 身份证校验 (支持18位最后X)
+        let idType = document.getElementById('idType').value;
+        let idNo = document.getElementById('idNo').value.trim().toUpperCase();
+        let idCardReg = /^[1-9]\d{5}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dX]$/i;
+        if(idType === 'idcard' && (!idNo || !idCardReg.test(idNo))) { markError('formIdNo', true); isValid=false; } else markError('formIdNo', false);
+        if(idType === 'passport' && !idNo) { markError('formIdNo', true); isValid=false; } else markError('formIdNo', false);
+        // 时间
+        let time = document.getElementById('fraudTime').value.trim();
+        if(!time) { markError('formTime', true); isValid=false; } else markError('formTime', false);
+        // 类型
+        let fType = document.getElementById('fraudType').value.trim();
+        if(!fType) { markError('formType', true); isValid=false; } else markError('formType', false);
+        // 平台
+        let platform = document.getElementById('fraudPlatform').value.trim();
+        if(!platform) { markError('formPlatform', true); isValid=false; } else markError('formPlatform', false);
+        // 金额
+        let money = document.getElementById('fraudMoney').value.trim();
+        if(!money || isNaN(parseFloat(money)) || parseFloat(money)<=0) { markError('formMoney', true); isValid=false; } else markError('formMoney', false);
+        // 详细经过
+        let detail = document.getElementById('fraudDetail').value.trim();
+        if(!detail) { markError('formDetail', true); isValid=false; } else markError('formDetail', false);
+        return isValid;
     }
-    function initUpload(areaId,fileId,previewId,cb){
+    function markError(formId, isError) {
+        let group = document.getElementById(formId);
+        if(group) {
+            if(isError) group.classList.add('error');
+            else group.classList.remove('error');
+        }
+    }
+
+    // 生成报案材料 (含验证)
+    function generateReport() {
+        if(!validateReportForm()) { alert('请正确填写所有必填项，尤其检查手机号(11位)和身份证号格式。'); return; }
+        let name = document.getElementById('name').value, phone = document.getElementById('phone').value, idType = document.getElementById('idType').value, idNo = document.getElementById('idNo').value;
+        let time = document.getElementById('fraudTime').value, fType = document.getElementById('fraudType').value, platform = document.getElementById('fraudPlatform').value;
+        let money = document.getElementById('fraudMoney').value, otherName = document.getElementById('otherName').value||'暂无', otherAcc = document.getElementById('otherAccount').value||'暂无', detail = document.getElementById('fraudDetail').value;
+        let report = `==================== 反诈报案材料 ====================
+报案人姓名：${name}
+联系电话：${phone}
+证件类型：${idType==='idcard'?'身份证':'护照'}
+证件号码：${idNo}
+
+被骗时间：${time}
+诈骗类型：${fType}
+被骗平台：${platform}
+被骗金额：¥${parseFloat(money).toFixed(2)}
+对方账号/昵称：${otherName}
+对方收款账号：${otherAcc}
+
+详细经过：
+${detail}
+
+证据图片：${reportImages.length}张
+=====================================================`;
+        let resultDiv = document.getElementById('reportResult');
+        resultDiv.textContent = report;
+        resultDiv.classList.add('show');
+        if(systemSettings.autoSave) addHistory('report', report.substring(0,200));
+    }
+
+    // 其他功能复用之前逻辑 (OCR上传、账单、聊天等)
+    function initUpload(areaId,fileId,previewId,cb) {
         const area=document.getElementById(areaId), input=document.getElementById(fileId), container=document.getElementById(previewId);
         area.addEventListener('click',()=>input.click());
         input.addEventListener('change',e=>handleFiles(e.target.files,container,cb));
@@ -1006,7 +850,7 @@
     }
     function handleFiles(files,container,cb){
         let valid=Array.from(files).filter(f=>f.type.includes('image/'));
-        if(!valid.length){alert('请上传图片');return;}
+        if(!valid.length) return;
         let imageFiles=[];
         container.innerHTML='';
         valid.forEach((file,idx)=>{
@@ -1022,206 +866,42 @@
             };
             reader.readAsDataURL(file);
         });
-        setTimeout(()=>cb(imageFiles),300);
+        setTimeout(()=>cb(imageFiles),200);
     }
-    // 核心：使用DeepSeek视觉API进行OCR
-    async function ocrImagesWithDeepSeek(imgs){
-        if(!imgs.length) return;
-        let ocrDiv = document.getElementById('ocrResult');
-        ocrDiv.innerHTML = '<div class="loading-tip"><span class="loading-spin"></span>DeepSeek AI 正在识别图片文字...</div>';
-        try {
-            // 构建多模态消息
-            let content = [{ type: "text", text: "请提取以下图片中的所有文字内容，按照图片顺序输出，用“【图片1】”这样的标记区分，只输出文字，不要额外解释。" }];
-            for(let img of imgs) {
-                content.push({ type: "image_url", image_url: { url: img.url } });
-            }
-            const messages = [
-                { role: "system", content: "你是一个专业的OCR文字识别助手，请从图片中提取所有可见文字，保持原始格式。" },
-                { role: "user", content: content }
-            ];
-            const resp = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
-            });
-            if(!resp.ok){
-                const errText = await resp.text();
-                throw new Error(`API错误 ${resp.status}: ${errText}`);
-            }
-            const data = await resp.json();
-            const extracted = data.choices?.[0]?.message?.content || "未识别到文字内容";
-            let finalText = extracted;
-            // 自动脱敏
-            if(document.getElementById('desensitizeSwitch').checked){
-                finalText = finalText.replace(/(\d{3})\d{4}(\d{4})/g,'$1****$2')
-                                     .replace(/(\d{6})\d{8,10}(\d{4})/g,'$1***********$2');
-            }
-            const fraudTextarea = document.getElementById('fraudText');
-            fraudTextarea.value = fraudTextarea.value + (fraudTextarea.value ? "\n" : "") + finalText;
-            ocrDiv.textContent = `✅ DeepSeek OCR完成，提取到 ${extracted.length} 个字符，已填入文本框。`;
-        } catch(err){
-            ocrDiv.textContent = `❌ DeepSeek OCR失败：${err.message}`;
-            console.error(err);
-        }
+    function initImageUpload() {
+        initUpload('identifyUpload','identifyFile','identifyPreview',(files)=>{ identifyImages = files; if(files.length) ocrImagesWithTesseract(files); });
+        initUpload('reportUpload','reportFile','reportPreview',(files)=> reportImages = files);
     }
-
-    function initBillUpload(areaId,fileId){
-        const area=document.getElementById(areaId), input=document.getElementById(fileId);
+    function initBillUpload() {
+        let area=document.getElementById('billUpload'), input=document.getElementById('billFile');
         area.addEventListener('click',()=>input.click());
-        input.addEventListener('change',e=>{
-            let file=e.target.files[0]; if(!file) return;
-            let ext=file.name.split('.').pop().toLowerCase();
-            if(!['csv','xlsx','xls'].includes(ext)){alert('请上传CSV/XLSX/XLS文件');return;}
-            let reader=new FileReader();
-            reader.onload=ev=>{
-                try{
-                    if(ext==='csv') billData={raw:ev.target.result,type:'csv',name:file.name};
-                    else{let wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});billData={raw:wb,type:'xlsx',name:file.name};}
-                    alert('账单文件上传成功，请点击"解析账单"');
-                }catch(err){alert('解析失败');console.error(err);}
-            };
-            ext==='csv'?reader.readAsText(file):reader.readAsArrayBuffer(file);
-        });
-        area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('dragover');});
-        area.addEventListener('dragleave',()=>area.classList.remove('dragover'));
-        area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('dragover');let file=e.dataTransfer.files[0];if(file){input.files=e.dataTransfer.files;input.dispatchEvent(new Event('change'));}});
+        input.addEventListener('change',e=>{ let file=e.target.files[0]; if(!file) return; let reader=new FileReader(); reader.onload=ev=>{ let ext=file.name.split('.').pop().toLowerCase(); if(ext==='csv') billData={raw:ev.target.result,type:'csv'}; else{let wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'}); billData={raw:wb,type:'xlsx'};} alert('账单已上传'); }; ext==='csv'?reader.readAsText(file):reader.readAsArrayBuffer(file); });
     }
-    function parseBill(){
-        if(!billData){alert('请先上传账单文件');return;}
-        let billRes=document.getElementById('billResult');
-        billRes.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>正在解析账单...</div>'; billRes.classList.add('show');
-        setTimeout(()=>{
-            try{
-                let total=0, records=[];
-                if(billData.type==='csv'){
-                    let lines=billData.raw.split('\n').filter(l=>l.trim());
-                    lines.forEach((l,idx)=>{if(idx===0)return;let cols=l.split(',');let amount=0,type='';cols.forEach(c=>{let num=parseFloat(c.replace(/[^0-9.-]/g,''));if(!isNaN(num)&&num!==0) amount=Math.abs(num);if(c.includes('支出')||c.includes('付款')) type=c;});if(amount>0&&(type.includes('支出')||type.includes('付款'))){total+=amount;records.push({amount});}});
-                }else{
-                    let wb=billData.raw, ws=wb.Sheets[wb.SheetNames[0]], data=XLSX.utils.sheet_to_json(ws);
-                    data.forEach(row=>{let amt=parseFloat(row['金额']||row['Amount']||0);let typ=row['收支类型']||row['交易类型']||'';if(typ.includes('支出')||typ.includes('付款')||amt<0){let absAmt=Math.abs(amt);total+=absAmt;records.push({amount:absAmt});}});
-                }
-                billRes.textContent=`账单解析完成！\n📊 账单统计：\n- 总支出笔数：${records.length}笔\n- 总支出金额：¥${total.toFixed(2)}元\n`;
-                billData.parsed={totalOut:total,outRecords:records};
-            }catch(e){billRes.textContent=`解析失败：${e.message}`;}
-        },1000);
-    }
-    function detectFraud(){
-        let txt=document.getElementById('fraudText').value.trim();
-        if(!txt&&identifyImages.length===0){alert('请填写识别文本或上传图片');return;}
-        let resDiv=document.getElementById('detectResult');
-        resDiv.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>正在分析诈骗特征...</div>';resDiv.classList.add('show');
-        setTimeout(()=>{
-            let kw={police:['公安局','逮捕','通缉','涉案','配合调查','保证金','安全账户'],loan:['贷款','无抵押','低利息','手续费','保证金','解冻金'],service:['客服','退款','订单异常','保证金','解冻','验证'],leader:['领导','老板','帮忙转账','保密','急用','私事'],all:['刷单','返利','中奖','红包','提现','充值','转账','验证码','密码','银行卡']};
-            let type=document.querySelector('.corpus-btn.active').getAttribute('data-type');
-            let keywords=kw[type]||kw.all;
-            let matched=keywords.filter(k=>txt.includes(k));
-            let result=matched.length?`⚠️ 识别结果：疑似${type==='all'?'诈骗':type+'诈骗'}\n匹配关键词：${matched.join('、')}\n风险等级：高\n建议：立即停止联系，保存证据并报警`:`✅ 识别结果：未检测到明显诈骗特征\n风险等级：低\n建议：仍需提高警惕，核实身份后再资金往来`;
-            resDiv.textContent=result;
-            if(systemSettings.autoSave) addHistory('detect',result);
-        },1500);
-    }
-
-    // DeepSeek深度判定（复用聊天接口）
-    async function doubaoDeepDetect() {
-        let txt = document.getElementById('fraudText').value.trim();
-        if (!txt && identifyImages.length === 0) {
-            alert('请填写识别文本或上传图片');
-            return;
-        }
-        let resDiv = document.getElementById('detectResult');
-        resDiv.innerHTML = '<div class="loading-tip"><span class="loading-spin"></span>DeepSeek 深度分析中，请稍候...</div>';
-        resDiv.classList.add('show');
-        try {
-            const systemMsg = { role: "system", content: "你是一位资深反诈专家，请对用户提供的文本进行深度分析。分析内容包括：是否涉及诈骗、诈骗类型、风险等级（高/中/低）、具体手法、受害者应对建议。请用清晰的中文回答，适当使用标题和要点。" };
-            const userMsg = { role: "user", content: `请分析以下内容是否为诈骗：\n\n${txt}` };
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: [systemMsg, userMsg] })
-            });
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`服务器错误 ${response.status}: ${errText}`);
-            }
-            const data = await response.json();
-            const reply = data.choices?.[0]?.message?.content || data.content || "分析失败，请稍后重试。";
-            resDiv.textContent = `【DeepSeek深度判定】\n${reply}`;
-            if (systemSettings.autoSave) addHistory('detect', `DeepSeek深度判定：${reply.substring(0, 200)}`);
-        } catch (err) {
-            resDiv.textContent = `❌ 深度判定失败：${err.message}。请检查网络或后端配置。`;
-        }
-    }
-
-    function clearIdentify(){document.getElementById('fraudText').value='';document.getElementById('ocrResult').textContent='';document.getElementById('identifyPreview').innerHTML='';identifyImages=[];document.getElementById('detectResult').classList.remove('show');}
-    function fillToReport(){let res=document.getElementById('detectResult').textContent;if(!res){alert('请先进行诈骗识别');return;}document.getElementById('fraudDetail').value=res;switchPage('reportPage');}
-    function generateReport(){
-        let name=document.getElementById('name').value.trim()||'未填写', phone=document.getElementById('phone').value.trim()||'未填写', idType=document.getElementById('idType').value, idNo=document.getElementById('idNo').value.trim()||'未填写';
-        let time=document.getElementById('fraudTime').value.trim()||'未填写', fType=document.getElementById('fraudType').value.trim()||'未填写', platform=document.getElementById('fraudPlatform').value.trim()||'未填写';
-        let money=document.getElementById('fraudMoney').value.trim()||'0', otherName=document.getElementById('otherName').value.trim()||'暂无', otherAcc=document.getElementById('otherAccount').value.trim()||'暂无', detail=document.getElementById('fraudDetail').value.trim()||'无详细描述';
-        let report=`==================== 反诈报案材料 ====================\n报案人姓名：${name}\n联系电话：${phone}\n证件类型：${idType}\n证件号码：${idNo}\n\n被骗时间：${time}\n诈骗类型：${fType}\n被骗平台：${platform}\n被骗金额：¥${money}\n对方账号/昵称：${otherName}\n对方收款账号：${otherAcc}\n\n详细经过：\n${detail}\n\n证据图片：${reportImages.length}张\n=====================================================`;
-        let resultDiv=document.getElementById('reportResult'); resultDiv.textContent=report; resultDiv.classList.add('show');
-        if(systemSettings.autoSave) addHistory('report',report);
-    }
-    function copyReport(){let div=document.getElementById('reportResult');if(!div.classList.contains('show')){alert('请先生成报案材料');return;}navigator.clipboard.writeText(div.textContent).then(()=>alert('复制成功')).catch(()=>alert('复制失败'));}
-    function exportTxt(){let div=document.getElementById('reportResult');if(!div.classList.contains('show')){alert('请先生成报案材料');return;}let blob=new Blob([div.textContent],{type:'text/plain;charset=utf-8'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`报案材料_${new Date().toISOString().slice(0,10)}.txt`;a.click();}
-    function exportPdf(){alert('PDF生成功能示例，完整实现需额外库');}
-    function addHistory(type,content){historyRecords.unshift({id:Date.now(),time:new Date().toLocaleString(),type,content});localStorage.setItem('fraudHistory',JSON.stringify(historyRecords));renderHistory();}
-    function renderHistory(){let list=document.getElementById('historyList');if(!historyRecords.length){list.innerHTML='<div class="history-empty">暂无历史记录</div>';return;}let html='';historyRecords.forEach(r=>{html+=`<div class="history-item"><div class="history-header"><span>${r.type==='detect'?'诈骗识别':'报案材料'}</span><span class="history-time">${r.time}</span></div><div class="history-content">${r.content.substring(0,100)}...</div></div>`;});list.innerHTML=html;}
-    function clearHistory(){if(confirm('清空所有历史记录？')){historyRecords=[];localStorage.removeItem('fraudHistory');renderHistory();}}
-    function initSettings(){document.getElementById('autoSaveSwitch').checked=systemSettings.autoSave;document.getElementById('defaultDesensitizeSwitch').checked=systemSettings.defaultDesensitize;}
-    function saveSettings(){systemSettings.autoSave=document.getElementById('autoSaveSwitch').checked;systemSettings.defaultDesensitize=document.getElementById('defaultDesensitizeSwitch').checked;localStorage.setItem('systemSettings',JSON.stringify(systemSettings));alert('设置已保存');}
-    function resetSettings(){systemSettings={autoSave:true,defaultDesensitize:true};initSettings();localStorage.setItem('systemSettings',JSON.stringify(systemSettings));alert('已恢复默认');}
-    function initChatModule(){
-        let send=document.getElementById('sendChatBtn'), input=document.getElementById('chatInput'), clear=document.getElementById('clearChatBtn');
-        if(send) send.addEventListener('click',sendUserMessage);
-        if(input) input.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendUserMessage();}});
-        if(clear) clear.addEventListener('click',()=>{if(confirm('清空对话记录？')){conversationHistory=[{role:"system",content:"你是反诈科普与思政教育智能助手，专为大学生服务。结合法治意识、诚信责任，解析诈骗套路，给出预防建议，语气温和专业。"}];document.getElementById('chatMessages').innerHTML=`<div class="message bot"><div class="message-avatar">🤖</div><div class="message-bubble">对话已清空，有任何反诈问题随时问我~</div></div>`;}});
-        let ta=document.getElementById('chatInput'); if(ta) ta.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';});
-    }
-    async function sendUserMessage(){
-        let inp=document.getElementById('chatInput'), msg=inp.value.trim(); if(!msg||isWaitingReply) return;
-        addMessageToUI('user',msg); inp.value=''; inp.style.height='auto'; isWaitingReply=true;
-        let sendBtn=document.getElementById('sendChatBtn'); if(sendBtn) sendBtn.disabled=true; showTypingIndicator();
-        try{
-            conversationHistory.push({role:"user",content:msg});
-            let res=await fetch('/api/chat', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({messages:conversationHistory.slice(-20)})
-            });
-            if(!res.ok){
-                let errText = await res.text();
-                throw new Error(`服务器错误 ${res.status}: ${errText}`);
-            }
-            let data=await res.json();
-            let reply = data.choices?.[0]?.message?.content || data.content || "抱歉，我无法回答这个问题。";
-            conversationHistory.push({role:"assistant",content:reply}); removeTypingIndicator(); addMessageToUI('bot',reply);
-        }catch(err){
-            removeTypingIndicator(); 
-            addMessageToUI('bot',`❌ 请求失败: ${err.message}。请确保已正确部署 Cloudflare Pages 后端并在环境变量中设置了 DEEPSEEK_API_KEY。`);
-        }
-        finally{isWaitingReply=false; if(sendBtn) sendBtn.disabled=false; let cont=document.getElementById('chatMessages'); if(cont) cont.scrollTop=cont.scrollHeight;}
-    }
-    function addMessageToUI(sender,text){let container=document.getElementById('chatMessages');if(!container)return;let div=document.createElement('div');div.className=`message ${sender==='user'?'user':'bot'}`;let avatar=document.createElement('div');avatar.className='message-avatar';avatar.textContent=sender==='user'?'我':'🤖';let bubble=document.createElement('div');bubble.className='message-bubble';bubble.textContent=text;div.appendChild(avatar);div.appendChild(bubble);container.appendChild(div);container.scrollTop=container.scrollHeight;}
-    function showTypingIndicator(){removeTypingIndicator();let container=document.getElementById('chatMessages');if(!container)return;let div=document.createElement('div');div.id='typingIndicator';div.className='message bot';div.innerHTML='<div class="message-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>';container.appendChild(div);container.scrollTop=container.scrollHeight;}
-    function removeTypingIndicator(){let ind=document.getElementById('typingIndicator');if(ind)ind.remove();}
-    function bindAllEvents(){
-        document.getElementById('startDetectBtn')?.addEventListener('click',detectFraud);
-        document.getElementById('doubaoBtn')?.addEventListener('click',doubaoDeepDetect);
-        document.getElementById('clearIdentifyBtn')?.addEventListener('click',clearIdentify);
-        document.getElementById('fillToReportBtn')?.addEventListener('click',fillToReport);
-        document.getElementById('parseBillBtn')?.addEventListener('click',parseBill);
-        document.getElementById('billToReportBtn')?.addEventListener('click',()=>{if(billData&&billData.parsed){document.getElementById('fraudMoney').value=billData.parsed.totalOut;switchPage('reportPage');}else alert('请先解析账单');});
-        document.getElementById('generateReportBtn')?.addEventListener('click',generateReport);
-        document.getElementById('copyReportBtn')?.addEventListener('click',copyReport);
-        document.getElementById('exportTxtBtn')?.addEventListener('click',exportTxt);
-        document.getElementById('exportPdfBtn')?.addEventListener('click',exportPdf);
-        document.getElementById('clearHistoryBtn')?.addEventListener('click',clearHistory);
-        document.getElementById('saveSettingBtn')?.addEventListener('click',saveSettings);
-        document.getElementById('resetSettingBtn')?.addEventListener('click',resetSettings);
-        document.querySelectorAll('.corpus-btn').forEach(btn=>btn.addEventListener('click',function(){document.querySelectorAll('.corpus-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');}));
-        document.getElementById('idType')?.addEventListener('change',function(){let label=document.getElementById('idNoLabel');if(this.value==='idcard') label.textContent='身份证号 *（18位，最后一位可为X）';else label.textContent='护照号码 *（请填写完整号码）';});
-    }
+    function parseBill(){ if(!billData){alert('请先上传账单文件');return;} let billRes=document.getElementById('billResult'); billRes.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>解析中...</div>'; billRes.classList.add('show'); setTimeout(()=>{ try{ let total=0, records=[]; if(billData.type==='csv'){ let lines=billData.raw.split('\n'); lines.forEach((l,idx)=>{if(idx===0)return;let amount=0; let parts=l.split(','); parts.forEach(c=>{let num=parseFloat(c.replace(/[^0-9.-]/g,'')); if(!isNaN(num)&&num!==0&&(c.includes('支出')||c.includes('付款'))) amount=Math.abs(num);}); if(amount>0){total+=amount; records.push(amount);}}); } else{ let wb=billData.raw, ws=wb.Sheets[wb.SheetNames[0]], data=XLSX.utils.sheet_to_json(ws); data.forEach(row=>{ let amt=parseFloat(row['金额']||row['Amount']||0); if(amt<0||(row['收支类型']&&row['收支类型'].includes('支出'))){ total+=Math.abs(amt); records.push(Math.abs(amt));}}); } billRes.textContent=`账单解析完成！\n总支出笔数：${records.length}笔\n总支出金额：¥${total.toFixed(2)}元`; billData.parsed={totalOut:total}; }catch(e){billRes.textContent=`解析失败`;}},1000); }
+    function billToReport(){ if(billData?.parsed) { document.getElementById('fraudMoney').value=billData.parsed.totalOut; switchPage('reportPage'); } else alert('请先解析账单'); }
+    function detectFraud(){ let txt=document.getElementById('fraudText').value.trim(); if(!txt){alert('请输入文本或上传图片');return;} let type=document.querySelector('.corpus-btn.active').getAttribute('data-type'); let kwMap={police:['公安局','安全账户'],loan:['贷款','手续费'],service:['客服','退款'],leader:['领导','转账'],all:['刷单','返利','验证码']}; let matched=kwMap[type]||kwMap.all; let result=matched.filter(k=>txt.includes(k)).length?`⚠️ 疑似诈骗，请提高警惕`:`✅ 未发现明显诈骗特征`; document.getElementById('detectResult').innerHTML=result; document.getElementById('detectResult').classList.add('show'); if(systemSettings.autoSave) addHistory('detect',result); }
+    async function doubaoDeepDetect(){ let txt=document.getElementById('fraudText').value.trim(); if(!txt) return alert('请输入内容'); let resDiv=document.getElementById('detectResult'); resDiv.innerHTML='<div class="loading-tip"><span class="loading-spin"></span>DeepSeek分析中...</div>'; resDiv.classList.add('show'); try{ let resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:"system",content:"反诈专家"},{role:"user",content:`分析诈骗风险：${txt}`}]})}); let data=await resp.json(); let reply=data.choices?.[0]?.message?.content||'分析完成'; resDiv.textContent=`【DeepSeek深度判定】\n${reply}`; if(systemSettings.autoSave) addHistory('detect',reply.substring(0,200)); }catch(e){ resDiv.textContent=`判定失败：请配置后端`; } }
+    function fillToReport(){ let res=document.getElementById('detectResult').textContent; if(res && !res.includes('判定失败')) document.getElementById('fraudDetail').value=res; switchPage('reportPage'); }
+    function clearIdentify(){ document.getElementById('fraudText').value=''; document.getElementById('identifyPreview').innerHTML=''; identifyImages=[]; document.getElementById('ocrResult').innerHTML=''; document.getElementById('detectResult').classList.remove('show'); }
+    function copyReport(){ let div=document.getElementById('reportResult'); if(div.classList.contains('show')) navigator.clipboard.writeText(div.textContent).then(()=>alert('复制成功')); else alert('请先生成报案材料'); }
+    function exportTxt(){ let div=document.getElementById('reportResult'); if(div.classList.contains('show')){ let blob=new Blob([div.textContent],{type:'text/plain'}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`报案材料_${new Date().toISOString().slice(0,10)}.txt`; a.click(); } else alert('请先生成报案材料'); }
+    async function exportPdf(){ let div=document.getElementById('reportResult'); if(!div.classList.contains('show')||!div.textContent.trim()){ alert('请先生成报案材料'); return; } const { jsPDF } = window.jspdf; let pdf = new jsPDF('p', 'mm', 'a4'); let lines = pdf.splitTextToSize(div.textContent, 180); let y = 20; pdf.setFontSize(12); for(let line of lines){ if(y > 280){ pdf.addPage(); y=20; } pdf.text(line, 15, y); y+=7; } pdf.save(`反诈报案材料_${Date.now()}.pdf`); }
+    function addHistory(type,content){ historyRecords.unshift({id:Date.now(),time:new Date().toLocaleString(),type,content}); localStorage.setItem('fraudHistory',JSON.stringify(historyRecords.slice(0,50))); renderHistory(); }
+    function renderHistory(){ let listDiv=document.getElementById('historyList'); if(!historyRecords.length){ listDiv.innerHTML='<div class="history-empty">暂无记录</div>'; return; } let html=''; historyRecords.forEach(r=>{ html+=`<div class="history-item"><div class="history-header"><span>${r.type==='detect'?'🔍识别':'📄报案'}</span><span>${r.time}</span></div><div>${r.content.substring(0,100)}...</div></div>`; }); listDiv.innerHTML=html; }
+    function clearHistory(){ if(confirm('清空所有历史记录？')){ historyRecords=[]; localStorage.removeItem('fraudHistory'); renderHistory(); } }
+    function initSettings(){ document.getElementById('autoSaveSwitch').checked=systemSettings.autoSave; document.getElementById('defaultDesensitizeSwitch').checked=systemSettings.defaultDesensitize; document.getElementById('desensitizeSwitch').checked=systemSettings.defaultDesensitize; }
+    function saveSettings(){ systemSettings.autoSave=document.getElementById('autoSaveSwitch').checked; systemSettings.defaultDesensitize=document.getElementById('defaultDesensitizeSwitch').checked; localStorage.setItem('systemSettings',JSON.stringify(systemSettings)); alert('设置已保存'); }
+    function resetSettings(){ systemSettings={autoSave:true,defaultDesensitize:true}; initSettings(); localStorage.setItem('systemSettings',JSON.stringify(systemSettings)); alert('已恢复默认'); }
+    async function sendUserMessage(){ let inp=document.getElementById('chatInput'), msg=inp.value.trim(); if(!msg||isWaitingReply) return; addMessageToUI('user',msg); inp.value=''; isWaitingReply=true; showTypingIndicator(); try{ conversationHistory.push({role:"user",content:msg}); let res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:conversationHistory.slice(-20)})}); let data=await res.json(); let reply=data.choices?.[0]?.message?.content||'抱歉，无法回答'; conversationHistory.push({role:"assistant",content:reply}); removeTypingIndicator(); addMessageToUI('bot',reply); }catch(e){ removeTypingIndicator(); addMessageToUI('bot',`请求失败，请配置后端`); } finally{ isWaitingReply=false; document.getElementById('sendChatBtn').disabled=false; } }
+    function addMessageToUI(sender,text){ let container=document.getElementById('chatMessages'); let div=document.createElement('div'); div.className=`message ${sender}`; div.innerHTML=`<div class="message-avatar">${sender==='user'?'我':'🤖'}</div><div class="message-bubble">${text}</div>`; container.appendChild(div); container.scrollTop=container.scrollHeight; }
+    function showTypingIndicator(){ removeTypingIndicator(); let container=document.getElementById('chatMessages'); let div=document.createElement('div'); div.id='typingIndicator'; div.className='message bot'; div.innerHTML='<div class="message-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>'; container.appendChild(div); container.scrollTop=container.scrollHeight; }
+    function removeTypingIndicator(){ let ind=document.getElementById('typingIndicator'); if(ind) ind.remove(); }
+    function switchPage(pageId){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.getElementById(pageId).classList.add('active'); updateNavActive(pageId); }
+    function updateNavActive(id){ document.querySelectorAll('#globalNav .nav-btn').forEach(btn=>{ if(btn.getAttribute('data-target')===id) btn.classList.add('active'); else btn.classList.remove('active'); }); updateUnderline(); }
+    function updateUnderline(){ let active=document.querySelector('#globalNav .nav-btn.active'); if(active){ let underline=document.getElementById('globalNavUnderline'); let rect=active.getBoundingClientRect(), parentRect=active.parentElement.getBoundingClientRect(); underline.style.width=`${rect.width}px`; underline.style.left=`${rect.left-parentRect.left}px`; } }
+    window.onload=function(){
+        let steps=[20,40,60,80,100], idx=0, interval=setInterval(()=>{ if(idx>=steps.length){ clearInterval(interval); document.getElementById('loader').style.display='none'; document.getElementById('homePage').classList.add('active'); updateUnderline(); initSettings(); renderHistory(); initImageUpload(); initBillUpload(); document.getElementById('startDetectBtn')?.addEventListener('click',detectFraud); document.getElementById('doubaoBtn')?.addEventListener('click',doubaoDeepDetect); document.getElementById('clearIdentifyBtn')?.addEventListener('click',clearIdentify); document.getElementById('fillToReportBtn')?.addEventListener('click',fillToReport); document.getElementById('parseBillBtn')?.addEventListener('click',parseBill); document.getElementById('billToReportBtn')?.addEventListener('click',billToReport); document.getElementById('generateReportBtn')?.addEventListener('click',generateReport); document.getElementById('copyReportBtn')?.addEventListener('click',copyReport); document.getElementById('exportTxtBtn')?.addEventListener('click',exportTxt); document.getElementById('exportPdfBtn')?.addEventListener('click',exportPdf); document.getElementById('clearHistoryBtn')?.addEventListener('click',clearHistory); document.getElementById('saveSettingBtn')?.addEventListener('click',saveSettings); document.getElementById('resetSettingBtn')?.addEventListener('click',resetSettings); document.querySelectorAll('.corpus-btn').forEach(btn=>btn.addEventListener('click',function(){ document.querySelectorAll('.corpus-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active'); })); document.getElementById('idType')?.addEventListener('change',function(){ document.getElementById('idNoLabel').innerText=this.value==='idcard'?'身份证号 *':'护照号码 *'; }); document.querySelectorAll('[data-goto]').forEach(btn=>btn.addEventListener('click',()=>switchPage(btn.getAttribute('data-goto')))); document.querySelectorAll('#globalNav .nav-btn').forEach(btn=>btn.addEventListener('click',()=>switchPage(btn.getAttribute('data-target')))); document.getElementById('clearChatBtn')?.addEventListener('click',()=>{ conversationHistory=[{role:"system",content:"你是反诈科普与思政教育智能助手"}]; document.getElementById('chatMessages').innerHTML='<div class="message bot"><div class="message-avatar">🤖</div><div class="message-bubble">对话已清空</div></div>'; }); document.getElementById('sendChatBtn')?.addEventListener('click',sendUserMessage); document.getElementById('chatInput')?.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendUserMessage();}}); window.addEventListener('resize',updateUnderline); }else{ document.getElementById('progressBar').style.width=`${steps[idx]}%`; document.getElementById('progressText').innerHTML=`加载中 ${steps[idx]}%`; idx++; } },200);
+    };
 </script>
 </body>
 </html>
