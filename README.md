@@ -2,7 +2,7 @@ Readme（CH）
 Copyright NEEPU Xin Firefly-IV 
 提示词编写者：Wang A Black.
 UI（部分）Liu A Green.
-灵感来源：中国人民.
+灵感来源：自动化处理程序.
 创作目的：服务社会.
 完善提示词及最初源码提供及运营：Xin Firefly-IV
 您好，欢迎您使用本助手进行反诈活动，项目经过AI处理后发布，您需要辨别其中的内容
@@ -13,7 +13,7 @@ Readme （EN）
 Copyright NEEPU Xin Firefly IV 
 Author: Wang A Black. 
 UI (partial) Liu A Green. 
-Inspiration: Chinese people 
+Inspiration: Automated Processing Program
 Purpose of creation: To serve society 
 Provide and operate complete prompt words and initial source code: Xin Firefly IV. 
 Hello, welcome to use this assistant for anti fraud activities. 
